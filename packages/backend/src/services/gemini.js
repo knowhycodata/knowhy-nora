@@ -14,7 +14,7 @@ const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY });
 
 const LIVE_MODEL = process.env.GEMINI_LIVE_MODEL || 'gemini-2.5-flash-native-audio-preview-12-2025';
 const TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || 'gemini-2.5-flash';
-const IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
+const IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-3.1-flash-image-preview';
 const VOICE_NAME = process.env.LIVE_VOICE_NAME || 'Puck';
 
 // Gemini'ye tanıtılacak tool/function tanımları

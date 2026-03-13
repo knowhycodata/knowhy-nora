@@ -93,15 +93,28 @@ ADIMLAR:
 6. Sonra: "Harika, bu testi de tamamladınız! Bir sonraki teste geçmeye hazır mısınız?" de.
 7. ⚠️ Kullanıcı onay verene kadar Test 3'e GEÇME.
 
-=== TEST 3: GÖRSEL TANIMA ===
+=== TEST 3: GÖRSEL TANIMA (Multi-Agent) ===
 ⚠️ Bu teste SADECE kullanıcı onay verdikten sonra başla!
+
+⚠️ KRİTİK: Test 3 çift-ajan mimarisi ile çalışır!
+Sen (Nöra) = Konuşma Ajanı — kullanıcıyla konuşur, cevap alır
+VisualTestAgent = Koordinatör Ajan — görsel üretir, frontend'e gönderir, akışı yönetir
+
+AKIŞ:
 1. "Görsel tanıma testine geçiyoruz. Ekranınıza sırayla 3 görsel göstereceğim. Her birinde ne gördüğünüzü söylemenizi isteyeceğim."
-2. Sırayla: generate_test_image(0, "saat") → "Ne görüyorsunuz?" → cevap al
-3. generate_test_image(1, "anahtar") → "Ne görüyorsunuz?" → cevap al
-4. generate_test_image(2, "kalem") → "Ne görüyorsunuz?" → cevap al
-5. submit_visual_recognition çağır.
-6. Sonra: "Bu testi de tamamladık! Son testimize geçmeye hazır mısınız?" de.
-7. ⚠️ Kullanıcı onay verene kadar Test 4'e GEÇME.
+2. start_visual_test() çağır → İlk görsel otomatik ekranda gösterilir.
+3. Kullanıcıya "Ekrandaki görsele bakın. Ne görüyorsunuz?" diye sor.
+4. Kullanıcı cevap verince record_visual_answer(imageIndex, userAnswer) çağır.
+5. Sonraki görsel otomatik gösterilir. Tekrar "Ne görüyorsunuz?" sor.
+6. 3 görsel de cevaplanınca record_visual_answer son görselin cevabında tüm cevapları döner.
+7. submit_visual_recognition çağır.
+8. Sonra: "Bu testi de tamamladık! Son testimize geçmeye hazır mısınız?" de.
+
+⚠️ ASLA generate_test_image kullanma! Daima start_visual_test ve record_visual_answer kullan.
+⚠️ Görsel verisi sana GELMEZ. Görsel doğrudan kullanıcının ekranına gösterilir.
+⚠️ Her cevaptan sonra record_visual_answer çağırmayı UNUTMA. Cevapsız sonraki görsele geçme.
+⚠️ "VISUAL_TEST_NEXT:" ile başlayan mesajlar VisualTestAgent'tan gelir. Talimatlarına uy.
+⚠️ Kullanıcı onay verene kadar Test 4'e GEÇME.
 
 === TEST 4: YÖNELİM ===
 ⚠️ Bu teste SADECE kullanıcı onay verdikten sonra başla!
@@ -153,15 +166,27 @@ const TOOL_DECLARATIONS = [
     },
   },
   {
-    name: 'generate_test_image',
-    description: 'Multi-Agent: Nano Banana 2 Pro ile görsel tanıma testi için otomatik görsel üretir. Koordinatör ajan bu fonksiyonu çağırır, kullanıcı değil. Üretilen görsel otomatik olarak ekranda gösterilir.',
+    name: 'start_visual_test',
+    description: 'Görsel tanıma testini başlatır. VisualTestAgent koordinasyonunda çalışır. İlk görseli otomatik üretir ve ekranda gösterir. Bu fonksiyonu Test 3 başlangıcında bir kez çağır.',
     parameters: {
       type: 'object',
       properties: {
-        imageIndex: { type: 'number', description: 'Görsel indeksi (0, 1, 2)' },
-        subject: { type: 'string', description: 'Görselde olması gereken nesne/konu (Türkçe). Örn: saat, anahtar, kalem, kedi, ağaç' },
+        sessionId: { type: 'string', description: 'Test oturumu ID' },
       },
-      required: ['imageIndex', 'subject'],
+      required: ['sessionId'],
+    },
+  },
+  {
+    name: 'record_visual_answer',
+    description: 'Kullanıcının görsel tanıma cevabını kaydeder ve sonraki görseli gösterir. Her görsel için kullanıcı cevap verdikten sonra bu fonksiyonu çağır.',
+    parameters: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string', description: 'Test oturumu ID' },
+        imageIndex: { type: 'number', description: 'Cevaplanılan görselin indeksi (0, 1, 2)' },
+        userAnswer: { type: 'string', description: 'Kullanıcının verdiği cevap (ne gördüğü)' },
+      },
+      required: ['sessionId', 'imageIndex', 'userAnswer'],
     },
   },
   {

@@ -1,28 +1,72 @@
 /**
- * Image Generator Service - Multi-Agent: ImageGenerator Sub-Agent
+ * Image Generator Service - Imagen 4 API
  * 
- * Gemini Nano Banana 2 Pro (gemini-3-pro-image-preview) modeli ile görsel üretir.
- * ADK multi-agent pattern'ini Node.js'de simüle eder.
+ * Google Imagen 4 Fast ile görsel üretir.
+ * generateImages() API'sini kullanır (generateContent değil!).
+ * Ayrı API key ile kota ayrımı sağlar.
  * 
  * Multi-Agent Yapısı:
- *   Coordinator (Nöra Live) → PromptRefiner → ImageGenerator → FeedbackPresenter
- * 
- * Bu servis ImageGenerator sub-agent rolündedir.
+ *   Coordinator (Nöra Live) → PromptBuilder → ImageGenerator (Imagen 4) → ResultPresenter
  */
 
 const { GoogleGenAI } = require('@google/genai');
+const { createLogger } = require('../lib/logger');
 
-const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
-const IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.0-flash-exp';
+const log = createLogger('ImageGenerator');
 
-const ai = new GoogleGenAI({ apiKey: GOOGLE_API_KEY });
+// Görsel üretim için ayrı istemci — farklı API key ile kota ayrımı
+const IMAGE_API_KEY = process.env.GEMINI_IMAGE_API_KEY || process.env.GOOGLE_API_KEY;
+const IMAGEN_MODEL = process.env.IMAGEN_MODEL || 'imagen-4.0-fast-generate-001';
+const imageGenAI = new GoogleGenAI({ apiKey: IMAGE_API_KEY });
+
+log.info('ImageGenerator initialized', { 
+  model: IMAGEN_MODEL,
+  usingDedicatedKey: !!process.env.GEMINI_IMAGE_API_KEY,
+  keyPrefix: IMAGE_API_KEY?.substring(0, 12) + '...',
+});
+
+// Türkçe → İngilizce prompt mapping (kota tasarrufu — API çağrısı yok)
+const SUBJECT_PROMPTS = {
+  'saat': 'A simple, clean, highly recognizable analog clock face centered on a pure white background. Minimalist studio photography style, soft even lighting, no shadows, no text.',
+  'anahtar': 'A single classic metal key, clean and simple, centered on a pure white background. Minimalist studio photography style, soft even lighting, sharp focus, no shadows, no text.',
+  'kalem': 'A single wooden pencil, clean and simple, centered on a pure white background. Minimalist studio photography style, soft even lighting, sharp detail, no shadows, no text.',
+  'kedi': 'A cute simple cat sitting, centered on a pure white background. Minimalist illustration style, clean lines, soft colors, no text.',
+  'ağaç': 'A simple green tree, centered on a pure white background. Minimalist illustration style, clean shape, soft colors, no text.',
+  'ev': 'A simple house with a door and windows, centered on a pure white background. Minimalist illustration style, clean lines, no text.',
+  'araba': 'A simple car, side view, centered on a pure white background. Minimalist illustration style, clean lines, bright colors, no text.',
+  'çiçek': 'A single colorful flower, centered on a pure white background. Minimalist illustration style, clean petals, no text.',
+  'yıldız': 'A simple five-pointed star, centered on a pure white background. Minimalist design, clean edges, golden color, no text.',
+  'kitap': 'A single closed book, centered on a pure white background. Minimalist studio photography style, soft lighting, no text.',
+};
 
 /**
- * Multi-Agent Orchestrator
- * ADK SequentialAgent pattern'ini simüle eder:
- *   Step 1: PromptRefiner - Kullanıcı isteğini profesyonel prompt'a çevirir
- *   Step 2: ImageGenerator - Nano Banana ile görsel üretir
- *   Step 3: ResultPresenter - Sonucu formatlar
+ * Retry helper - exponential backoff ile yeniden deneme
+ */
+async function retryWithBackoff(fn, { maxRetries = 2, baseDelay = 2000, label = '' } = {}) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn(attempt);
+    } catch (error) {
+      const isRetryable = error.status === 429 || error.status >= 500;
+      if (!isRetryable || attempt === maxRetries) {
+        throw error;
+      }
+      const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000;
+      log.warn(`${label} Retry ${attempt + 1}/${maxRetries}`, { 
+        status: error.status, 
+        delay: Math.round(delay),
+        error: error.message?.substring(0, 100),
+      });
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+}
+
+/**
+ * Multi-Agent Orchestrator — Imagen 4 Pipeline
+ *   Step 1: Prompt oluştur (sabit mapping, API çağrısı yok)
+ *   Step 2: Imagen 4 generateImages() ile görsel üret
+ *   Step 3: Sonucu formatla
  */
 class ImageGenerationPipeline {
   constructor() {
@@ -30,85 +74,97 @@ class ImageGenerationPipeline {
   }
 
   /**
-   * Sub-Agent 1: Prompt Refiner
-   * Kullanıcının doğal dil isteğini profesyonel bir image generation prompt'a çevirir.
+   * Sub-Agent 1: Prompt Builder (API çağrısı yapmaz, kota tüketmez)
    */
-  async refinePrompt(userRequest) {
-    console.log('[PromptRefiner] Refining prompt:', userRequest);
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: `Sen bir profesyonel görsel prompt mühendisisin. 
-Kullanıcının Türkçe isteğini, Gemini Nano Banana 2 Pro modeli için optimize edilmiş, 
-detaylı bir İngilizce image generation prompt'a çevir.
-
-Kurallar:
-- Prompt İngilizce olmalı
-- Detaylı ve betimleyici ol (ışık, kompozisyon, stil, renk paleti)
-- Negatif unsurları belirt
-- Kısa ve öz ol, 2-3 cümle
-
-Kullanıcı isteği: "${userRequest}"
-
-Sadece prompt'u yaz, başka bir şey ekleme.`,
-    });
-
-    const refinedPrompt = response.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    this.state.refinedPrompt = refinedPrompt || userRequest;
+  buildPrompt(userRequest) {
+    const lowerReq = userRequest.toLowerCase();
+    for (const [key, prompt] of Object.entries(SUBJECT_PROMPTS)) {
+      if (lowerReq.includes(key)) {
+        log.info('PromptBuilder: matched subject', { subject: key });
+        this.state.refinedPrompt = prompt;
+        this.state.userRequest = userRequest;
+        return prompt;
+      }
+    }
+    
+    const fallbackPrompt = `A simple, clean, highly recognizable image of "${userRequest}". Centered on a pure white background. Minimalist style, soft lighting, no text, no shadows.`;
+    log.info('PromptBuilder: generic prompt', { prompt: fallbackPrompt.substring(0, 100) });
+    this.state.refinedPrompt = fallbackPrompt;
     this.state.userRequest = userRequest;
-
-    console.log('[PromptRefiner] Refined:', this.state.refinedPrompt);
-    return this.state.refinedPrompt;
+    return fallbackPrompt;
   }
 
   /**
-   * Sub-Agent 2: Image Generator
-   * Nano Banana 2 Pro ile görsel üretir.
+   * Sub-Agent 2: Image Generator — Imagen 4 generateImages API
+   * generateContent() DEĞİL, generateImages() kullanır!
    */
   async generateImage(prompt, options = {}) {
-    console.log('[ImageGenerator] Generating image with model:', IMAGE_MODEL);
+    const aspectRatio = options.aspectRatio || '1:1';
 
-    const config = {
-      responseModalities: ['Text', 'Image'],
-    };
+    log.info('Imagen 4 generateImages starting', { model: IMAGEN_MODEL, aspectRatio });
 
-    if (options.aspectRatio) {
-      config.imageConfig = { aspectRatio: options.aspectRatio };
-    }
+    try {
+      const result = await retryWithBackoff(
+        async () => {
+          const response = await imageGenAI.models.generateImages({
+            model: IMAGEN_MODEL,
+            prompt,
+            config: {
+              numberOfImages: 1,
+              outputMimeType: 'image/jpeg',
+              aspectRatio,
+            },
+          });
 
-    const response = await ai.models.generateContent({
-      model: IMAGE_MODEL,
-      contents: prompt,
-      config,
-    });
+          log.info('Imagen response received', { 
+            model: IMAGEN_MODEL,
+            generatedImages: response.generatedImages?.length || 0,
+          });
 
-    let imageData = null;
-    let textResponse = null;
+          if (!response.generatedImages || response.generatedImages.length === 0) {
+            throw new Error('No images returned from Imagen API');
+          }
 
-    if (response.candidates?.[0]?.content?.parts) {
-      for (const part of response.candidates[0].content.parts) {
-        if (part.inlineData) {
-          imageData = {
-            data: part.inlineData.data,
-            mimeType: part.inlineData.mimeType || 'image/png',
+          const generatedImage = response.generatedImages[0];
+          const imageBytes = generatedImage.image.imageBytes;
+
+          if (!imageBytes) {
+            throw new Error('Image bytes empty in Imagen response');
+          }
+
+          const imageData = {
+            data: imageBytes, // zaten base64 string
+            mimeType: 'image/jpeg',
           };
-        }
-        if (part.text) {
-          textResponse = part.text;
-        }
-      }
+
+          log.info('Imagen image data extracted', { 
+            dataLength: imageBytes.length,
+            mimeType: 'image/jpeg',
+          });
+
+          return { imageData, textResponse: null };
+        },
+        { maxRetries: 2, baseDelay: 3000, label: `[${IMAGEN_MODEL}]` }
+      );
+
+      this.state.imageData = result.imageData;
+      this.state.textResponse = result.textResponse;
+      log.info('Image generation SUCCESS', { model: IMAGEN_MODEL, dataLength: result.imageData?.data?.length || 0 });
+      return result;
+    } catch (error) {
+      log.error('Imagen generation FAILED', { 
+        model: IMAGEN_MODEL,
+        status: error.status, 
+        error: error.message?.substring(0, 200),
+      });
+      this.state.imageData = null;
+      this.state.textResponse = null;
+      return { imageData: null, textResponse: null };
     }
-
-    this.state.imageData = imageData;
-    this.state.textResponse = textResponse;
-
-    console.log('[ImageGenerator] Image generated:', imageData ? 'success' : 'no image');
-    return { imageData, textResponse };
   }
 
   /**
    * Sub-Agent 3: Result Presenter
-   * Sonucu formatlar ve istemciye gönderilebilir hale getirir.
    */
   formatResult() {
     return {
@@ -121,35 +177,16 @@ Sadece prompt'u yaz, başka bir şey ekleme.`,
   }
 
   /**
-   * Pipeline'ı çalıştırır (ADK SequentialAgent.run() benzeri)
+   * Pipeline'ı çalıştırır
    */
   async run(userRequest, options = {}) {
     this.state = {};
-
-    // Step 1: Prompt Refine
-    const refinedPrompt = await this.refinePrompt(userRequest);
-
-    // Step 2: Image Generation
-    await this.generateImage(refinedPrompt, options);
-
-    // Step 3: Format Result
+    const prompt = this.buildPrompt(userRequest);
+    await this.generateImage(prompt, options);
     return this.formatResult();
-  }
-
-  /**
-   * Feedback ile yeniden üretim (ADK LoopAgent benzeri)
-   */
-  async regenerateWithFeedback(feedback, options = {}) {
-    const previousPrompt = this.state.refinedPrompt || '';
-    const newRequest = `Önceki prompt: "${previousPrompt}". Kullanıcı geri bildirimi: "${feedback}". Bu geri bildirime göre görseli iyileştir.`;
-
-    return await this.run(newRequest, options);
   }
 }
 
-/**
- * Singleton pipeline instance
- */
 let pipelineInstance = null;
 
 function getImagePipeline() {

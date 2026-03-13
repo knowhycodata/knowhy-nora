@@ -15,9 +15,27 @@ const { scoreStoryRecall } = require('./scoring/storyRecall');
 const { scoreVisualRecognition } = require('./scoring/visualRecognition');
 const { scoreOrientation } = require('./scoring/orientation');
 const { getImagePipeline } = require('./imageGenerator');
+const { getStaticTestImage } = require('./staticTestImages');
 
-// Multi-Agent: Test görselleri artık Nano Banana 2 Pro ile otomatik üretilir
-// Koordinatör ajan subject parametresiyle ne üretileceğini belirler
+// Visual Test Agent referansları (session bazlı)
+const visualTestAgents = new Map(); // sessionId -> VisualTestAgent
+
+function registerVisualTestAgent(sessionId, agent) {
+  visualTestAgents.set(sessionId, agent);
+}
+
+function unregisterVisualTestAgent(sessionId) {
+  const agent = visualTestAgents.get(sessionId);
+  if (agent) agent.destroy();
+  visualTestAgents.delete(sessionId);
+}
+
+function getVisualTestAgent(sessionId) {
+  return visualTestAgents.get(sessionId);
+}
+
+// Multi-Agent: Test görselleri Imagen 4 Fast ile otomatik üretilir
+// API kota aşımında statik SVG görseller fallback olarak kullanılır
 const TEST_IMAGE_SUBJECTS = [
   { index: 0, subject: 'saat', correctAnswer: 'saat' },
   { index: 1, subject: 'anahtar', correctAnswer: 'anahtar' },
@@ -41,6 +59,10 @@ async function handleToolCall(toolName, args, clientWs = null, sessionId = null)
       return await handleVerbalFluency(args);
     case 'submit_story_recall':
       return await handleStoryRecall(args);
+    case 'start_visual_test':
+      return await handleStartVisualTest(args);
+    case 'record_visual_answer':
+      return await handleRecordVisualAnswer(args);
     case 'generate_test_image':
       return await handleGenerateTestImage(args);
     case 'submit_visual_recognition':
@@ -113,56 +135,71 @@ async function handleStoryRecall({ sessionId, originalStory, recalledStory }) {
 }
 
 /**
- * Multi-Agent: generate_test_image
- * Koordinatör ajan (Nöra) → PromptRefiner → ImageGenerator (Nano Banana 2 Pro) → Presenter
- * 
- * Akış:
- * 1. Koordinatör ajan Test 3'e geldiğinde bu fonksiyonu çağırır
- * 2. Backend: subject'i alır, PromptRefiner ile İngilizce prompt'a çevirir
- * 3. Nano Banana 2 Pro ile görsel üretir
- * 4. base64 görsel + correctAnswer frontend'e gönderilir
- * 5. Frontend otomatik olarak görseli gösterir
- * 6. Kullanıcı ne gördüğünü söyler (tam otonom)
+ * Multi-Agent: start_visual_test
+ * VisualTestAgent koordinasyonunda çalışır.
+ * Gemini'ye ASLA base64 görsel gönderilmez — sadece hafif text metadata döner.
+ * Görsel üretimi ve frontend'e gönderimi VisualTestAgent tarafından yapılır.
  */
-async function handleGenerateTestImage({ imageIndex, subject }) {
-  console.log(`[MultiAgent] generate_test_image: index=${imageIndex}, subject=${subject}`);
+async function handleStartVisualTest({ sessionId }) {
+  log.info('start_visual_test çağrıldı', { sessionId });
 
-  const pipeline = getImagePipeline();
-  const prompt = `Basit, net ve tanınabilir bir ${subject} görseli. Minimalist, temiz arka plan.`;
-
-  try {
-    const result = await pipeline.run(prompt, { aspectRatio: '1:1' });
-
-    if (!result.success || !result.image) {
-      console.log('[MultiAgent] Image generation failed, using fallback');
-      return {
-        success: true,
-        imageIndex,
-        correctAnswer: subject,
-        generatedByAI: false,
-        message: `Görsel ${imageIndex + 1} gösteriliyor. Kullanıcıya ne gördüğünü sor.`,
-      };
-    }
-
+  const agent = visualTestAgents.get(sessionId);
+  if (!agent) {
+    log.error('VisualTestAgent bulunamadı', { sessionId });
     return {
-      success: true,
-      imageIndex,
-      imageBase64: result.image.data,
-      mimeType: result.image.mimeType,
-      correctAnswer: subject,
-      generatedByAI: true,
-      message: `Nano Banana 2 Pro ile görsel ${imageIndex + 1} üretildi. Kullanıcıya gösteriliyor. Ne gördüğünü sor.`,
-    };
-  } catch (error) {
-    console.error('[MultiAgent] Image generation error:', error.message);
-    return {
-      success: true,
-      imageIndex,
-      correctAnswer: subject,
-      generatedByAI: false,
-      message: `Görsel ${imageIndex + 1} gösteriliyor. Kullanıcıya ne gördüğünü sor.`,
+      success: false,
+      message: 'Görsel test ajanı henüz hazır değil. Lütfen tekrar deneyin.',
     };
   }
+
+  // VisualTestAgent testi başlatır — görsel üretir ve frontend'e gönderir
+  const result = await agent.startTest();
+  
+  // Gemini'ye dönen response: GÖRSEL VERİSİ YOK, sadece talimat
+  return result;
+}
+
+/**
+ * Multi-Agent: record_visual_answer
+ * Nöra kullanıcıdan cevap aldığında bu tool'u çağırır.
+ * VisualTestAgent cevabı kaydeder ve sonraki görsele geçer.
+ */
+async function handleRecordVisualAnswer({ sessionId, imageIndex, userAnswer }) {
+  log.info('record_visual_answer çağrıldı', { sessionId, imageIndex, userAnswer });
+
+  const agent = visualTestAgents.get(sessionId);
+  if (!agent) {
+    log.error('VisualTestAgent bulunamadı', { sessionId });
+    return { success: false, message: 'Görsel test ajanı bulunamadı.' };
+  }
+
+  // Cevabı kaydet ve sonraki görsele geç
+  const result = await agent.recordAnswer(imageIndex, userAnswer);
+  return result;
+}
+
+/**
+ * Legacy: generate_test_image — geriye uyumluluk için bırakıldı
+ * Yeni akışta start_visual_test kullanılır.
+ * Eğer bu çağrılırsa, base64 veriyi Gemini'ye göndermez.
+ */
+async function handleGenerateTestImage({ imageIndex, subject, sessionId }) {
+  log.warn('Legacy generate_test_image çağrıldı — start_visual_test kullanılmalı', { imageIndex, subject });
+
+  // VisualTestAgent varsa ona yönlendir
+  const agent = visualTestAgents.get(sessionId);
+  if (agent && !agent.isTestActive) {
+    const result = await agent.startTest();
+    return result;
+  }
+
+  // Fallback: Eski davranış ama base64'ü Gemini'ye göndermeden
+  return {
+    success: true,
+    imageIndex,
+    correctAnswer: subject,
+    message: `Görsel ${imageIndex + 1} ekranda gösteriliyor. Kullanıcıya ne gördüğünü sor ve cevabını bekle.`,
+  };
 }
 
 async function handleVisualRecognition({ sessionId, answers }) {
@@ -256,5 +293,8 @@ module.exports = {
   handleToolCall, 
   registerGeminiSession, 
   unregisterGeminiSession,
+  registerVisualTestAgent,
+  unregisterVisualTestAgent,
+  getVisualTestAgent,
   TEST_IMAGE_SUBJECTS 
 };

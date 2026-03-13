@@ -177,7 +177,7 @@ export default function AgentSession() {
       </div>
 
       {/* ─── Ana İçerik ─── */}
-      <main className="flex-1 flex flex-col items-center px-4 relative overflow-hidden">
+      <main className="flex-1 flex flex-col items-center px-4 relative overflow-y-auto">
         
         {/* Bağlantı durumu */}
         {isConnecting && (
@@ -189,7 +189,7 @@ export default function AgentSession() {
 
         {/* Aktif oturum */}
         {isActive && (
-          <div className="flex-1 flex flex-col items-center justify-center">
+          <div className="flex-1 flex flex-col items-center justify-center w-full">
             <div className="flex flex-col items-center gap-4">
             <div className="relative h-44 w-44 flex items-center justify-center">
               <div
@@ -300,17 +300,17 @@ export default function AgentSession() {
               </div>
             )}
             </div>
-          </div>
-        )}
 
-        {/* Görsel üretimi */}
-        {(gemini.generatedImage || gemini.imageGenerating) && (
-          <div className="mt-6">
-            <GeneratedImagePanel
-              image={gemini.generatedImage}
-              isGenerating={gemini.imageGenerating}
-              onClose={() => {}}
-            />
+            {/* Görsel üretimi - isActive bloğunun içinde */}
+            {(gemini.generatedImage || gemini.imageGenerating) && (
+              <div className="mt-6 mb-4 w-full max-w-md mx-auto">
+                <GeneratedImagePanel
+                  image={gemini.generatedImage}
+                  isGenerating={gemini.imageGenerating}
+                  onClose={() => {}}
+                />
+              </div>
+            )}
           </div>
         )}
 

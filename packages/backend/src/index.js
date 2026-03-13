@@ -12,8 +12,9 @@ const authRoutes = require('./routes/auth');
 const sessionRoutes = require('./routes/sessions');
 const testRoutes = require('./routes/tests');
 const { GeminiLiveSession } = require('./services/geminiLive');
-const { handleToolCall, registerGeminiSession, unregisterGeminiSession } = require('./services/toolHandler');
+const { handleToolCall, registerGeminiSession, unregisterGeminiSession, registerVisualTestAgent, unregisterVisualTestAgent } = require('./services/toolHandler');
 const { BrainAgent } = require('./services/brainAgent');
+const { VisualTestAgent } = require('./services/visualTestAgent');
 const prisma = require('./lib/prisma');
 
 const log = createLogger('Server');
@@ -143,6 +144,27 @@ wss.on('connection', async (ws, req) => {
             );
             geminiSession.brainAgent = brainAgent;
             
+            // VisualTestAgent oluştur - Test 3 koordinasyonu
+            const visualTestAgent = new VisualTestAgent(
+              testSessionId,
+              // sendToClient - frontend'e mesaj gönder
+              (data) => {
+                if (ws.readyState === 1) {
+                  ws.send(JSON.stringify(data));
+                }
+              },
+              // sendTextToLive - Live ajan'a text mesaj gönder
+              (text) => {
+                if (geminiSession) {
+                  geminiSession.sendText(text);
+                }
+              }
+            );
+            registerVisualTestAgent(testSessionId, visualTestAgent);
+            
+            // Brain Agent'a VisualTestAgent referansını ver
+            brainAgent.visualTestAgent = visualTestAgent;
+            
             // Timer için Gemini session'ı register et
             registerGeminiSession(testSessionId, geminiSession);
 
@@ -174,6 +196,7 @@ wss.on('connection', async (ws, req) => {
               geminiSession.close();
               activeSessions.delete(testSessionId);
               unregisterGeminiSession(testSessionId);
+              unregisterVisualTestAgent(testSessionId);
               geminiSession = null;
             }
             ws.send(JSON.stringify({ type: 'session_ended' }));
@@ -187,6 +210,11 @@ wss.on('connection', async (ws, req) => {
         // Binary audio
         const base64Audio = Buffer.from(rawData).toString('base64');
         if (geminiSession) {
+          if (!ws._audioChunkCount) ws._audioChunkCount = 0;
+          ws._audioChunkCount++;
+          if (ws._audioChunkCount === 1 || ws._audioChunkCount % 200 === 0) {
+            log.debug('Audio chunk received', { clientId, chunkCount: ws._audioChunkCount, dataSize: rawData.byteLength });
+          }
           geminiSession.sendAudio(base64Audio);
         } else {
           log.warn('Audio received but no Gemini session', { clientId });
@@ -203,6 +231,7 @@ wss.on('connection', async (ws, req) => {
     if (geminiSession) {
       geminiSession.close();
       activeSessions.delete(testSessionId);
+      unregisterVisualTestAgent(testSessionId);
     }
   });
 
@@ -211,6 +240,7 @@ wss.on('connection', async (ws, req) => {
     if (geminiSession) {
       geminiSession.close();
       activeSessions.delete(testSessionId);
+      unregisterVisualTestAgent(testSessionId);
     }
   });
 });

@@ -289,12 +289,27 @@ export function useGeminiLive() {
       case 'tool_result':
         if (message.name === 'generate_test_image') {
           setImageGenerating(false);
+          log.info('generate_test_image result', { 
+            success: message.result?.success, 
+            hasImage: !!message.result?.imageBase64,
+            imageIndex: message.result?.imageIndex,
+          });
           if (message.result?.success && message.result?.imageBase64) {
             setGeneratedImage({
               data: message.result.imageBase64,
               mimeType: message.result.mimeType || 'image/png',
               imageIndex: message.result.imageIndex,
-              generatedByAI: true,
+              generatedByAI: message.result.generatedByAI ?? true,
+            });
+          } else if (message.result?.success) {
+            // Fallback: görsel üretilemedi ama test devam ediyor
+            setGeneratedImage({
+              data: null,
+              mimeType: null,
+              imageIndex: message.result.imageIndex,
+              generatedByAI: false,
+              correctAnswer: message.result.correctAnswer,
+              fallback: true,
             });
           }
         }

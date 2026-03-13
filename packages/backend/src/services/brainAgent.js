@@ -11,6 +11,8 @@
  *   Browser ↔ WS ↔ Backend ↔ Gemini Live (ses)
  *                      ↕
  *                Brain Agent (rule-based analiz)
+ *                      ↕
+ *                VisualTestAgent (Test 3 koordinatörü)
  */
 
 const { createLogger } = require('../lib/logger');
@@ -22,6 +24,7 @@ class BrainAgent {
     this.sessionId = sessionId;
     this.sendToClient = sendToClient;
     this.sendTextToLive = sendTextToLive;
+    this.visualTestAgent = null; // Dışarıdan set edilir
     
     // State
     this.testPhase = 'IDLE';
@@ -93,7 +96,14 @@ class BrainAgent {
       case 'VERBAL_FLUENCY_ACTIVE':
         this._handleActive(role, lowerText, text);
         break;
-      // VERBAL_FLUENCY_DONE ve sonrası - Brain Agent timer işi bitti
+      case 'VERBAL_FLUENCY_DONE':
+      case 'STORY_RECALL_ACTIVE':
+        this._handlePostTest1(role, lowerText, agentBuf);
+        break;
+      case 'VISUAL_TEST_ACTIVE':
+        this._handleVisualTestActive(role, lowerText, text);
+        break;
+      // VISUAL_TEST_DONE, ORIENTATION_ACTIVE, DONE - Brain Agent pasif
     }
   }
 
@@ -302,9 +312,55 @@ class BrainAgent {
     this.testPhase = 'VERBAL_FLUENCY_DONE';
   }
 
+  /**
+   * Test 1 bittikten sonra Test 2 ve Test 3 geçişlerini takip et
+   */
+  _handlePostTest1(role, text, agentBuf) {
+    if (role !== 'agent') return;
+    
+    // Test 2 başladı mı?
+    const storyKeywords = ['hikaye', 'hikaye hatirlama', 'kısa bir hikaye', 'dikkatle dinleyin'];
+    if (this.testPhase === 'VERBAL_FLUENCY_DONE' && this._containsAny(agentBuf, storyKeywords)) {
+      log.info('Faz geçişi: VERBAL_FLUENCY_DONE → STORY_RECALL_ACTIVE', { sessionId: this.sessionId });
+      this.testPhase = 'STORY_RECALL_ACTIVE';
+    }
+    
+    // Test 3'e geçiş algila - görsel tanıma testi başlıyor
+    const visualKeywords = ['görsel tanıma', 'görsel test', 'ekranınıza', 'görsel göstereceğim'];
+    if (this._containsAny(agentBuf, visualKeywords) || this._containsAny(text, visualKeywords)) {
+      log.info('Faz geçişi: → VISUAL_TEST_ACTIVE', { sessionId: this.sessionId });
+      this.testPhase = 'VISUAL_TEST_ACTIVE';
+    }
+  }
+
+  /**
+   * Test 3 aktifken kullanıcı transkriptlerini VisualTestAgent'a ilet
+   */
+  _handleVisualTestActive(role, text, rawText) {
+    if (this.visualTestAgent && this.visualTestAgent.isTestActive) {
+      if (role === 'user') {
+        this.visualTestAgent.onUserTranscript(rawText);
+      } else {
+        this.visualTestAgent.onAgentTranscript(rawText);
+      }
+    }
+    
+    // Test 3 bitti mi? (submit_visual_recognition çağrıldıktan sonra)
+    if (role === 'agent') {
+      const doneKeywords = ['görsel tanıma testini tamamladınız', 'son testimize', 'yönelim'];
+      if (this._containsAny(text, doneKeywords)) {
+        log.info('Faz geçişi: VISUAL_TEST_ACTIVE → VISUAL_TEST_DONE', { sessionId: this.sessionId });
+        this.testPhase = 'VISUAL_TEST_DONE';
+      }
+    }
+  }
+
   destroy() {
     if (this.timerTimeout) clearTimeout(this.timerTimeout);
     if (this.bufferResetTimeout) clearTimeout(this.bufferResetTimeout);
+    if (this.visualTestAgent) {
+      this.visualTestAgent = null;
+    }
     log.info('BrainAgent temizlendi', { sessionId: this.sessionId });
   }
 
