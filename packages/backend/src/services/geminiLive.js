@@ -540,6 +540,20 @@ class GeminiLiveSession {
         result: result,
       });
 
+      // Oturum tamamlanınca frontend'i deterministik olarak bilgilendir
+      if (fc.name === 'complete_session' && result?.success) {
+        this.sendToClient({
+          type: 'session_completed',
+          sessionId: this.sessionId,
+          summary: {
+            totalScore: result.totalScore,
+            maxPossible: result.maxPossible,
+            percentage: result.percentage,
+            riskLevel: result.riskLevel,
+          },
+        });
+      }
+
       // Gemini'ye gönderilecek response'u sanitize et
       // base64 görsel verisi gibi büyük payloadlar Gemini Live API'yi çökertiyor
       // ("Request contains an invalid argument" → session close)

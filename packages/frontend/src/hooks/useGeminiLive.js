@@ -61,6 +61,7 @@ export function useGeminiLive() {
   const micDataArrayRef = useRef(null);
   const playerDataArrayRef = useRef(null);
   const audioMeterFrameRef = useRef(null);
+  const completionLockedRef = useRef(false);
 
   // State ref'ini güncel tut
   useEffect(() => {
@@ -223,6 +224,29 @@ export function useGeminiLive() {
     setOutputLevel(0);
   }, []);
 
+  const markSessionCompleted = useCallback((source = 'unknown') => {
+    if (completionLockedRef.current) return;
+
+    completionLockedRef.current = true;
+    log.info('Session completed lock acquired', { source });
+
+    setCurrentTest('all_done');
+    setState(SESSION_STATES.COMPLETED);
+    setIsSpeaking(false);
+    setCameraActive(false);
+    setCameraCommand(null);
+    setVideoAnalysisResult(null);
+    setCameraPresence(null);
+
+    stopMic();
+    clearAudioBuffer();
+
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'end_session' }));
+    }
+  }, [stopMic, clearAudioBuffer]);
+
   // ─── Transcript helpers ─────────────────────────────────────────
   const addTranscript = useCallback((role, text) => {
     if (!text || text.trim() === '') return;
@@ -274,6 +298,7 @@ export function useGeminiLive() {
         break;
 
       case 'connected':
+        if (completionLockedRef.current) break;
         log.info('Gemini Live bağlandı');
         if (!micStreamRef.current || !recorderCtxRef.current) {
           log.warn('Connected event geldi ama mikrofon aktif degil, yeniden baslatiliyor');
@@ -283,6 +308,7 @@ export function useGeminiLive() {
         break;
 
       case 'audio':
+        if (completionLockedRef.current) break;
         playAudio(message.data);
         setState(SESSION_STATES.SPEAKING);
         break;
@@ -302,12 +328,16 @@ export function useGeminiLive() {
       case 'turn_complete':
         finalizeLastTranscript();
         setIsSpeaking(false);
-        setState(SESSION_STATES.LISTENING);
+        if (!completionLockedRef.current) {
+          setState(SESSION_STATES.LISTENING);
+        }
         break;
 
       case 'interrupted':
         clearAudioBuffer();
-        setState(SESSION_STATES.LISTENING);
+        if (!completionLockedRef.current) {
+          setState(SESSION_STATES.LISTENING);
+        }
         break;
 
       case 'tool_call':
@@ -343,8 +373,7 @@ export function useGeminiLive() {
         }
         else if (message.name === 'submit_orientation') setCurrentTest('orientation_done');
         else if (message.name === 'complete_session') {
-          setCurrentTest('all_done');
-          setState(SESSION_STATES.COMPLETED);
+          markSessionCompleted('tool_call.complete_session');
         }
         break;
 
@@ -380,6 +409,9 @@ export function useGeminiLive() {
               generatedByAI: message.result.generatedByAI ?? true,
             });
           }
+        }
+        else if (message.name === 'complete_session' && message.result?.success) {
+          markSessionCompleted('tool_result.complete_session');
         }
         break;
 
@@ -448,13 +480,19 @@ export function useGeminiLive() {
         // Session kapandı — ama COMPLETED state'ine sadece complete_session ile geçilmeli
         // "Request contains an invalid argument" gibi beklenmedik kapanmalarda
         // kullanıcıya hata göster
-        if (stateRef.current !== SESSION_STATES.COMPLETED) {
+        if (!completionLockedRef.current && stateRef.current !== SESSION_STATES.COMPLETED) {
           log.warn('Session closed unexpectedly');
           // Bağlantı hatası olarak işaretle ama mevcut verileri koru
         }
         break;
       case 'session_ended':
-        setState(SESSION_STATES.COMPLETED);
+        markSessionCompleted('session_ended');
+        break;
+      case 'session_completed':
+        if (message.sessionId && !sessionId) {
+          setSessionId(message.sessionId);
+        }
+        markSessionCompleted('session_completed_event');
         break;
         
       case 'timer_started':
@@ -533,6 +571,10 @@ export function useGeminiLive() {
         break;
 
       case 'error':
+        if (completionLockedRef.current) {
+          log.warn('Server error after completion ignored', { message: message.message });
+          break;
+        }
         log.error('Server error', { message: message.message });
         setError(message.message);
         setState(SESSION_STATES.ERROR);
@@ -543,6 +585,7 @@ export function useGeminiLive() {
   // ─── Connect + Start (tek akış) ────────────────────────────────
   const connectAndStart = useCallback(async (token) => {
     log.info('connectAndStart called', { hasToken: !!token, wsExists: !!wsRef.current });
+    completionLockedRef.current = false;
     
     if (wsRef.current) {
       log.warn('Already connected, skipping');
@@ -596,12 +639,16 @@ export function useGeminiLive() {
     ws.onclose = (event) => {
       log.info('WebSocket closed', { code: event.code, reason: event.reason });
       wsRef.current = null;
-      if (stateRef.current !== SESSION_STATES.COMPLETED) {
+      if (!completionLockedRef.current && stateRef.current !== SESSION_STATES.COMPLETED) {
         setState(SESSION_STATES.IDLE);
       }
     };
 
     ws.onerror = (err) => {
+      if (completionLockedRef.current) {
+        log.warn('WebSocket error after completion ignored');
+        return;
+      }
       log.error('WebSocket error', { error: err });
       setError('WebSocket bağlantı hatası');
       setState(SESSION_STATES.ERROR);
@@ -613,6 +660,7 @@ export function useGeminiLive() {
     log.info('State effect triggered', { state, wsReady: wsRef.current?.readyState });
     
     if (state === SESSION_STATES.READY) {
+      if (completionLockedRef.current) return;
       const ws = wsRef.current;
       if (ws && ws.readyState === WebSocket.OPEN) {
         log.info('READY state: sending start_session');
@@ -648,6 +696,7 @@ export function useGeminiLive() {
   }, []);
 
   const disconnect = useCallback(() => {
+    completionLockedRef.current = false;
     stopMic();
     clearAudioBuffer();
     if (playerNodeRef.current) {
