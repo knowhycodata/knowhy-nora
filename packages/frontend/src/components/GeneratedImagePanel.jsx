@@ -1,147 +1,199 @@
 /**
- * GeneratedImagePanel - Nano Banana 2 Pro tarafından üretilen görseli gösterir
- * Multi-agent pipeline sonucu: PromptRefiner → ImageGenerator → Presenter
+ * GeneratedImagePanel - Test 3 Görsel Tanıma Modal/Popup
+ * 
+ * Fullscreen overlay olarak açılır.
+ * Görsel ortada büyük gösterilir, test ilerleme barı ve talimat içerir.
+ * Imagen 4 Fast ile üretilen veya fallback SVG görselleri gösterir.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function GeneratedImagePanel({ image, isGenerating, onClose }) {
-  const [expanded, setExpanded] = useState(false);
+  const [animateIn, setAnimateIn] = useState(false);
+  const [zoomed, setZoomed] = useState(false);
 
   const hasFallback = image && image.fallback && !image.data;
+  const totalImages = image?.totalImages || 3;
+  const currentIndex = (image?.imageIndex ?? 0) + 1;
+
+  useEffect(() => {
+    if (image || isGenerating) {
+      requestAnimationFrame(() => setAnimateIn(true));
+    } else {
+      setAnimateIn(false);
+    }
+  }, [image, isGenerating]);
+
   if (!image && !isGenerating) return null;
 
   return (
-    <div className="animate-slide-up">
-      <div className="glass rounded-2xl p-4 max-w-sm mx-auto overflow-hidden">
-        {/* Başlık */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center">
-              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
-                <circle cx="9" cy="9" r="2"/>
-                <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
-              </svg>
-            </div>
-            <span className="text-xs text-gray-500 font-medium">Imagen 4</span>
-          </div>
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center transition-all duration-300 ${
+        animateIn ? 'opacity-100' : 'opacity-0 pointer-events-none'
+      }`}
+    >
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
 
-          {image && (
-            <button
-              onClick={onClose}
-              className="text-gray-300 hover:text-gray-500 transition-colors"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
-              </svg>
-            </button>
-          )}
-        </div>
+      {/* Modal Container */}
+      <div
+        className={`relative z-10 w-full max-w-md mx-4 transition-all duration-500 ${
+          animateIn ? 'scale-100 translate-y-0' : 'scale-95 translate-y-4'
+        }`}
+      >
+        <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
 
-        {/* Yükleniyor */}
-        {isGenerating && !image && (
-          <div className="flex flex-col items-center justify-center py-12">
-            <div className="relative">
-              <div className="w-16 h-16 rounded-full border-2 border-amber-400/20 animate-spin" 
-                   style={{ borderTopColor: 'rgba(251, 191, 36, 0.8)' }} />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400/20 to-orange-500/20 animate-pulse" />
-              </div>
-            </div>
-            <p className="text-gray-400 text-xs mt-4 animate-pulse">
-              Görsel üretiliyor...
-            </p>
-            <p className="text-gray-300 text-[10px] mt-1">
-              Multi-Agent Pipeline aktif
-            </p>
-          </div>
-        )}
-
-        {/* Fallback: Görsel üretilemedi */}
-        {hasFallback && (
-          <div className="flex flex-col items-center justify-center py-10 rounded-xl bg-gray-50 border border-gray-100">
-            <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-3">
-              <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
-                <circle cx="9" cy="9" r="2"/>
-                <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
-              </svg>
-            </div>
-            <p className="text-sm font-medium text-gray-600">Görsel {(image.imageIndex ?? 0) + 1}</p>
-            <p className="text-xs text-gray-400 mt-1">Bu görseli hayal edin ve tanımlayın</p>
-          </div>
-        )}
-
-        {/* Üretilen Görsel */}
-        {image && !hasFallback && (
-          <>
-            <div 
-              className="relative rounded-xl overflow-hidden cursor-pointer group"
-              onClick={() => setExpanded(!expanded)}
-            >
-              <img
-                src={`data:${image.mimeType};base64,${image.data}`}
-                alt="Üretilen görsel"
-                className={`w-full object-cover rounded-xl transition-all duration-300 ${
-                  expanded ? 'max-h-[500px]' : 'max-h-64'
-                }`}
-              />
-              {/* Overlay */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-3">
-                <span className="text-white/90 text-[10px] flex items-center gap-1">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    {expanded ? (
-                      <>
-                        <polyline points="4 14 10 14 10 20"/>
-                        <polyline points="20 10 14 10 14 4"/>
-                        <line x1="14" x2="21" y1="10" y2="3"/>
-                        <line x1="3" x2="10" y1="21" y2="14"/>
-                      </>
-                    ) : (
-                      <>
-                        <polyline points="15 3 21 3 21 9"/>
-                        <polyline points="9 21 3 21 3 15"/>
-                        <line x1="21" x2="14" y1="3" y2="10"/>
-                        <line x1="3" x2="10" y1="21" y2="14"/>
-                      </>
-                    )}
+          {/* Header */}
+          <div className="px-5 pt-5 pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-sm">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+                    <circle cx="9" cy="9" r="2"/>
+                    <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
                   </svg>
-                  {expanded ? 'Küçült' : 'Büyüt'}
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">Görsel Tanıma Testi</h3>
+                  <p className="text-[11px] text-gray-400">Ekrandaki görseli inceleyin</p>
+                </div>
+              </div>
+
+              {/* İlerleme badge */}
+              {image && (
+                <div className="flex items-center gap-1.5 bg-gray-100 rounded-full px-3 py-1.5">
+                  <span className="text-xs font-semibold text-gray-700">{currentIndex}</span>
+                  <span className="text-[10px] text-gray-400">/</span>
+                  <span className="text-xs text-gray-500">{totalImages}</span>
+                </div>
+              )}
+            </div>
+
+            {/* İlerleme barı */}
+            {image && (
+              <div className="mt-3 flex gap-1.5">
+                {Array.from({ length: totalImages }).map((_, i) => (
+                  <div
+                    key={i}
+                    className={`h-1 flex-1 rounded-full transition-all duration-500 ${
+                      i < currentIndex
+                        ? 'bg-gray-900'
+                        : i === currentIndex
+                          ? 'bg-gray-300'
+                          : 'bg-gray-100'
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Görsel Alanı */}
+          <div className="px-5 pb-4">
+            {/* Yükleniyor */}
+            {isGenerating && !image && (
+              <div className="flex flex-col items-center justify-center py-16 rounded-2xl bg-gray-50 border border-gray-100">
+                <div className="relative">
+                  <div
+                    className="w-16 h-16 rounded-full border-[3px] border-gray-200 animate-spin"
+                    style={{ borderTopColor: '#f59e0b' }}
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-400/30 to-orange-500/30 animate-pulse" />
+                  </div>
+                </div>
+                <p className="text-gray-500 text-sm font-medium mt-5 animate-pulse">
+                  Görsel hazırlanıyor...
+                </p>
+                <p className="text-gray-300 text-[11px] mt-1">
+                  Imagen 4 ile üretiliyor
+                </p>
+              </div>
+            )}
+
+            {/* Fallback: Görsel üretilemedi */}
+            {hasFallback && (
+              <div className="flex flex-col items-center justify-center py-16 rounded-2xl bg-gray-50 border border-gray-100">
+                <div className="w-20 h-20 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+                    <circle cx="9" cy="9" r="2"/>
+                    <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+                  </svg>
+                </div>
+                <p className="text-base font-semibold text-gray-700">Görsel {currentIndex}</p>
+                <p className="text-xs text-gray-400 mt-1.5">Bu görseli hayal edin ve tanımlayın</p>
+              </div>
+            )}
+
+            {/* Üretilen Görsel */}
+            {image && !hasFallback && (
+              <div
+                className={`relative rounded-2xl overflow-hidden cursor-pointer group transition-all duration-300 ${
+                  zoomed ? 'ring-2 ring-amber-400/50' : ''
+                }`}
+                onClick={() => setZoomed(!zoomed)}
+              >
+                <img
+                  src={`data:${image.mimeType};base64,${image.data}`}
+                  alt={`Test Görseli ${currentIndex}`}
+                  className={`w-full object-contain rounded-2xl transition-all duration-500 bg-gray-50 ${
+                    zoomed ? 'max-h-[70vh] scale-105' : 'max-h-72'
+                  }`}
+                />
+
+                {/* Zoom indicator */}
+                <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="bg-black/50 backdrop-blur-sm rounded-lg p-1.5">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      {zoomed ? (
+                        <>
+                          <polyline points="4 14 10 14 10 20"/>
+                          <polyline points="20 10 14 10 14 4"/>
+                          <line x1="14" x2="21" y1="10" y2="3"/>
+                          <line x1="3" x2="10" y1="21" y2="14"/>
+                        </>
+                      ) : (
+                        <>
+                          <polyline points="15 3 21 3 21 9"/>
+                          <polyline points="9 21 3 21 3 15"/>
+                          <line x1="21" x2="14" y1="3" y2="10"/>
+                          <line x1="3" x2="10" y1="21" y2="14"/>
+                        </>
+                      )}
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Footer - Talimat */}
+          {image && (
+            <div className="px-5 pb-5">
+              <div className="flex items-center gap-2.5 bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
+                <div className="w-6 h-6 rounded-full bg-gray-900 flex items-center justify-center flex-shrink-0">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                    <line x1="12" x2="12" y1="19" y2="22"/>
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-700">Bu görselde ne görüyorsunuz?</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">Sesli olarak cevaplayın</p>
+                </div>
+              </div>
+
+              {/* AI badge */}
+              <div className="flex items-center justify-center mt-3">
+                <span className="text-[10px] text-gray-300 flex items-center gap-1">
+                  {image.generatedByAI ? 'Imagen 4 ile' : 'Statik'} görsel
                 </span>
               </div>
             </div>
-
-            {/* Açıklama */}
-            {image.description && (
-              <p className="text-gray-400 text-[11px] mt-2 leading-relaxed line-clamp-2">
-                {image.description}
-              </p>
-            )}
-
-            {/* Alt bilgi */}
-            <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
-              <span className="text-gray-300 text-[9px]">
-                Imagen 4 ile üretildi
-              </span>
-              {image.refinedPrompt && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    navigator.clipboard?.writeText(image.refinedPrompt);
-                  }}
-                  className="text-gray-300 hover:text-gray-500 transition-colors text-[9px] flex items-center gap-1"
-                  title={image.refinedPrompt}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
-                    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
-                  </svg>
-                  Prompt
-                </button>
-              )}
-            </div>
-          </>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

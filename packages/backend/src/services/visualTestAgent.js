@@ -19,15 +19,9 @@
 const { createLogger } = require('../lib/logger');
 const { getImagePipeline } = require('./imageGenerator');
 const { getStaticTestImage } = require('./staticTestImages');
+const { selectRandomKeywords } = require('./visualTestKeywords');
 
 const log = createLogger('VisualTestAgent');
-
-// Test 3 görselleri - sırayla gösterilecek
-const VISUAL_TEST_IMAGES = [
-  { index: 0, subject: 'saat', correctAnswer: 'saat' },
-  { index: 1, subject: 'anahtar', correctAnswer: 'anahtar' },
-  { index: 2, subject: 'kalem', correctAnswer: 'kalem' },
-];
 
 /**
  * Visual Test Agent States
@@ -46,6 +40,13 @@ class VisualTestAgent {
     this.sessionId = sessionId;
     this.sendToClient = sendToClient;       // Frontend'e WebSocket mesajı
     this.sendTextToLive = sendTextToLive;   // Gemini Live'a text mesaj
+
+    // Her session için rastgele 3 kelime seç
+    this.testImages = selectRandomKeywords(3);
+    log.info('Session için rastgele görseller seçildi', {
+      sessionId,
+      keywords: this.testImages.map(k => k.subject),
+    });
 
     // State
     this.state = VT_STATE.IDLE;
@@ -80,7 +81,7 @@ class VisualTestAgent {
     // Frontend'e test başladı bildirimi
     this.sendToClient({
       type: 'visual_test_started',
-      totalImages: VISUAL_TEST_IMAGES.length,
+      totalImages: this.testImages.length,
     });
 
     // İlk görseli üret ve göster
@@ -89,9 +90,10 @@ class VisualTestAgent {
     // Gemini'ye hafif response dön (GÖRSEL VERİSİ YOK!)
     return {
       success: true,
-      message: 'Görsel tanıma testi başlatıldı. İlk görsel ekranda gösteriliyor. Kullanıcıya "Ne görüyorsunuz?" diye sor ve cevabını bekle. Cevabı aldıktan sonra sana bir sonraki görseli hazırlayacağım.',
-      totalImages: VISUAL_TEST_IMAGES.length,
+      message: `Görsel tanıma testi başlatıldı. Bu oturumda gösterilecek görseller: ${this.testImages.map(k => k.subject).join(', ')}. İlk görsel ekranda gösteriliyor. Kullanıcıya "Ne görüyorsunuz?" diye sor ve cevabını bekle. Cevabı aldıktan sonra sana bir sonraki görseli hazırlayacağım.`,
+      totalImages: this.testImages.length,
       currentImage: 1,
+      selectedSubjects: this.testImages.map(k => k.subject),
     };
   }
 
@@ -102,13 +104,13 @@ class VisualTestAgent {
   async _generateAndShowNextImage() {
     this.currentImageIndex++;
 
-    if (this.currentImageIndex >= VISUAL_TEST_IMAGES.length) {
+    if (this.currentImageIndex >= this.testImages.length) {
       log.info('Tüm görseller gösterildi', { sessionId: this.sessionId });
       this.state = VT_STATE.COLLECTING;
       return;
     }
 
-    const imageConfig = VISUAL_TEST_IMAGES[this.currentImageIndex];
+    const imageConfig = this.testImages[this.currentImageIndex];
     this.state = VT_STATE.GENERATING;
 
     log.info('Görsel üretimi başlıyor', {
@@ -121,7 +123,7 @@ class VisualTestAgent {
     this.sendToClient({
       type: 'visual_test_generating',
       imageIndex: this.currentImageIndex,
-      totalImages: VISUAL_TEST_IMAGES.length,
+      totalImages: this.testImages.length,
     });
 
     try {
@@ -143,7 +145,7 @@ class VisualTestAgent {
           imageBase64: result.image.data,
           mimeType: result.image.mimeType,
           generatedByAI: true,
-          totalImages: VISUAL_TEST_IMAGES.length,
+          totalImages: this.testImages.length,
         });
       } else {
         // Fallback: Statik görsel
@@ -181,7 +183,7 @@ class VisualTestAgent {
         imageBase64: staticImage.data,
         mimeType: staticImage.mimeType,
         generatedByAI: false,
-        totalImages: VISUAL_TEST_IMAGES.length,
+        totalImages: this.testImages.length,
       });
     } else {
       // Hiç görsel yoksa bile frontend'e bildir
@@ -192,7 +194,7 @@ class VisualTestAgent {
         mimeType: null,
         generatedByAI: false,
         fallback: true,
-        totalImages: VISUAL_TEST_IMAGES.length,
+        totalImages: this.testImages.length,
       });
     }
   }
@@ -247,7 +249,7 @@ class VisualTestAgent {
     if (this.state !== VT_STATE.WAITING_ANSWER) return;
 
     const answer = this.userAnswerBuffer.trim();
-    const imageConfig = VISUAL_TEST_IMAGES[this.currentImageIndex];
+    const imageConfig = this.testImages[this.currentImageIndex];
 
     if (!answer) {
       log.warn('Boş cevap', { sessionId: this.sessionId, imageIndex: this.currentImageIndex });
@@ -267,7 +269,7 @@ class VisualTestAgent {
       userAnswer: answer.substring(0, 100),
       correctAnswer: imageConfig.correctAnswer,
       answeredCount: this.answers.length,
-      totalImages: VISUAL_TEST_IMAGES.length,
+      totalImages: this.testImages.length,
     });
 
     // Frontend'e cevap kaydedildi bildirimi
@@ -275,11 +277,11 @@ class VisualTestAgent {
       type: 'visual_test_answer_recorded',
       imageIndex: this.currentImageIndex,
       answeredCount: this.answers.length,
-      totalImages: VISUAL_TEST_IMAGES.length,
+      totalImages: this.testImages.length,
     });
 
     // Sırada görsel var mı?
-    if (this.currentImageIndex + 1 < VISUAL_TEST_IMAGES.length) {
+    if (this.currentImageIndex + 1 < this.testImages.length) {
       // Sonraki görsele geç
       log.info('Sonraki görsele geçiliyor', {
         sessionId: this.sessionId,
@@ -289,7 +291,7 @@ class VisualTestAgent {
       // Gemini'ye bildir — hafif text, görsel yok
       this.sendTextToLive(
         `VISUAL_TEST_NEXT: Kullanıcı görsel ${this.currentImageIndex + 1}'e "${answer}" cevabını verdi. ` +
-        `Şimdi görsel ${this.currentImageIndex + 2}/${VISUAL_TEST_IMAGES.length} ekranda gösteriliyor. ` +
+        `Şimdi görsel ${this.currentImageIndex + 2}/${this.testImages.length} ekranda gösteriliyor. ` +
         `Kullanıcıya "Şimdi ekrandaki yeni görsele bakın. Ne görüyorsunuz?" diye sor ve cevabını bekle.`
       );
 
@@ -312,7 +314,7 @@ class VisualTestAgent {
       }));
 
       this.sendTextToLive(
-        `VISUAL_TEST_COMPLETE: Tüm ${VISUAL_TEST_IMAGES.length} görsel cevaplandı. ` +
+        `VISUAL_TEST_COMPLETE: Tüm ${this.testImages.length} görsel cevaplandı. ` +
         `Cevaplar: ${JSON.stringify(answersForSubmit)}. ` +
         `Şimdi submit_visual_recognition fonksiyonunu çağır: ` +
         `sessionId: "${this.sessionId}", ` +
@@ -327,7 +329,7 @@ class VisualTestAgent {
       this.sendToClient({
         type: 'visual_test_completed',
         answeredCount: this.answers.length,
-        totalImages: VISUAL_TEST_IMAGES.length,
+        totalImages: this.testImages.length,
       });
     }
   }
@@ -346,7 +348,7 @@ class VisualTestAgent {
     // Debounce timeout'u iptal et (artık cevap geldi)
     if (this.answerBufferTimeout) clearTimeout(this.answerBufferTimeout);
 
-    const imageConfig = VISUAL_TEST_IMAGES[imageIndex] || VISUAL_TEST_IMAGES[this.currentImageIndex];
+    const imageConfig = this.testImages[imageIndex] || this.testImages[this.currentImageIndex];
     const answer = (userAnswer || '').trim();
 
     // Cevabı kaydet
@@ -370,20 +372,20 @@ class VisualTestAgent {
       type: 'visual_test_answer_recorded',
       imageIndex,
       answeredCount: this.answers.length,
-      totalImages: VISUAL_TEST_IMAGES.length,
+      totalImages: this.testImages.length,
     });
 
     // Sırada görsel var mı?
-    if (this.currentImageIndex + 1 < VISUAL_TEST_IMAGES.length) {
+    if (this.currentImageIndex + 1 < this.testImages.length) {
       // Sonraki görseli üret ve göster
       await this._generateAndShowNextImage();
 
       return {
         success: true,
-        message: `Görsel ${imageIndex + 1} cevabı kaydedildi. Görsel ${this.currentImageIndex + 1}/${VISUAL_TEST_IMAGES.length} ekranda gösteriliyor. Kullanıcıya "Şimdi ekrandaki yeni görsele bakın. Ne görüyorsunuz?" diye sor ve cevabını bekle.`,
+        message: `Görsel ${imageIndex + 1} cevabı kaydedildi. Görsel ${this.currentImageIndex + 1}/${this.testImages.length} ekranda gösteriliyor. Kullanıcıya "Şimdi ekrandaki yeni görsele bakın. Ne görüyorsunuz?" diye sor ve cevabını bekle.`,
         currentImage: this.currentImageIndex + 1,
-        totalImages: VISUAL_TEST_IMAGES.length,
-        remainingImages: VISUAL_TEST_IMAGES.length - this.answers.length,
+        totalImages: this.testImages.length,
+        remainingImages: this.testImages.length - this.answers.length,
       };
     } else {
       // Tüm görseller tamamlandı
@@ -394,7 +396,7 @@ class VisualTestAgent {
       this.sendToClient({
         type: 'visual_test_completed',
         answeredCount: this.answers.length,
-        totalImages: VISUAL_TEST_IMAGES.length,
+        totalImages: this.testImages.length,
       });
 
       const answersForSubmit = this.answers.map(a => ({
@@ -406,7 +408,7 @@ class VisualTestAgent {
       return {
         success: true,
         allComplete: true,
-        message: `Tüm ${VISUAL_TEST_IMAGES.length} görsel cevaplandı. Şimdi submit_visual_recognition fonksiyonunu çağır: sessionId: "${this.sessionId}", answers: ${JSON.stringify(answersForSubmit)}. Submit ettikten sonra kullanıcıya "Görsel tanıma testini tamamladınız! Son testimize geçmeye hazır mısınız?" de.`,
+        message: `Tüm ${this.testImages.length} görsel cevaplandı. Şimdi submit_visual_recognition fonksiyonunu çağır: sessionId: "${this.sessionId}", answers: ${JSON.stringify(answersForSubmit)}. Submit ettikten sonra kullanıcıya "Görsel tanıma testini tamamladınız! Son testimize geçmeye hazır mısınız?" de.`,
         answers: answersForSubmit,
       };
     }
@@ -439,8 +441,15 @@ class VisualTestAgent {
       state: this.state,
       currentImageIndex: this.currentImageIndex,
       answeredCount: this.answers.length,
-      totalImages: VISUAL_TEST_IMAGES.length,
+      totalImages: this.testImages.length,
     };
+  }
+
+  /**
+   * Bu session için seçilmiş keyword'leri döndürür
+   */
+  getSelectedKeywords() {
+    return this.testImages;
   }
 
   destroy() {
@@ -450,4 +459,4 @@ class VisualTestAgent {
   }
 }
 
-module.exports = { VisualTestAgent, VISUAL_TEST_IMAGES, VT_STATE };
+module.exports = { VisualTestAgent, VT_STATE };

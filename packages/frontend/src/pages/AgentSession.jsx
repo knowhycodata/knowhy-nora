@@ -302,16 +302,7 @@ export default function AgentSession() {
             )}
             </div>
 
-            {/* Görsel üretimi - isActive bloğunun içinde */}
-            {(gemini.generatedImage || gemini.imageGenerating) && (
-              <div className="mt-6 mb-4 w-full max-w-md mx-auto">
-                <GeneratedImagePanel
-                  image={gemini.generatedImage}
-                  isGenerating={gemini.imageGenerating}
-                  onClose={() => {}}
-                />
-              </div>
-            )}
+            {/* Görsel üretimi artık fullscreen modal olarak gösteriliyor — aşağıda render ediliyor */}
 
             {/* Kamera paneli - Test 4 sırasında */}
             {gemini.cameraActive && (
@@ -378,6 +369,15 @@ export default function AgentSession() {
         <TranscriptPanel
           transcripts={gemini.transcripts}
           onClose={() => setShowTranscript(false)}
+        />
+      )}
+
+      {/* ─── Görsel Tanıma Modal (Fullscreen Overlay) ─── */}
+      {(gemini.generatedImage || gemini.imageGenerating) && (
+        <GeneratedImagePanel
+          image={gemini.generatedImage}
+          isGenerating={gemini.imageGenerating}
+          onClose={() => {}}
         />
       )}
     </div>

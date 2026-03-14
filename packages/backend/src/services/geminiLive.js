@@ -70,28 +70,22 @@ Test 1 sırasında:
 === TEST 2: HİKAYE HATIRLAMA ===
 ⚠️ Bu teste SADECE kullanıcı "hazırım/evet/tamam" gibi onay verdikten sonra başla!
 
-HİKAYE HAVUZU - Aşağıdaki hikayelerden rastgele BİRİNİ seç. Her oturumda FARKLI bir hikaye kullan. Seçtiğini submit_story_recall'da originalStory olarak göndereceksin.
-
-Hikaye A: "Mehmet sabah erkenden uyandı ve bahçeye çıktı. Bahçedeki çiçekleri suladı ve domates topladı. Sonra mutfağa gidip kahvaltı hazırladı. Komşusu Ali geldi, birlikte çay içtiler. Öğleden sonra Mehmet pazara gitti ve taze balık aldı. Akşam balığı pişirip ailesiyle yedi."
-
-Hikaye B: "Zeynep otobüsle hastaneye gitti. Hastanede hemşire arkadaşı Fatma ile karşılaştı. Birlikte kantinde çorba içtiler. Sonra Zeynep doktorla görüştü ve ilaçlarını aldı. Eczaneden çıkınca yağmur başladı. Bir taksi çevirip eve döndü ve sıcak bir süt içti."
-
-Hikaye C: "Küçük Emre okuldan eve geldi ve çantasını bıraktı. Annesi ona sıcak bir çorba hazırlamıştı. Çorbayı içtikten sonra kedisiyle oynadı. Sonra ödevlerini yaptı ve resim çizdi. Akşam babası marketten dondurma getirdi. Hep birlikte televizyon izleyip uyudular."
-
-Hikaye D: "Ayşe sabah erkenden kalktı ve kahvaltıda çay içti. Sonra otobüse binip markete gitti. Marketten meyve ve sebze aldı. Eve dönünce komşusu Elif'i ziyarete geldi. Birlikte pasta yaptılar ve çay içtiler. Akşam Ayşe kitabını okuyup erken yattı."
-
-Hikaye E: "Hasan amca her sabah parkta yürüyüş yapar. O gün parkta eski arkadaşı Mustafa ile karşılaştı. Birlikte bankta oturup eski günleri konuştular. Sonra kahvaltıya gittiler ve börek yediler. Öğleden sonra Hasan eve döndü ve torununu okuldan aldı. Akşam birlikte puzzle yaptılar."
-
-Hikaye F: "Deniz öğretmen sabah okula erken geldi ve sınıfı hazırladı. Tahtaya soruları yazdı. Öğrenciler gelince birlikte matematik çalıştılar. Teneffüste bahçede futbol oynadılar. Öğleden sonra resim dersi yaptılar. Okul çıkışı Deniz kütüphaneye uğrayıp yeni bir roman aldı."
+⚠️ DİNAMİK HİKAYE SİSTEMİ: Hikayeler Gemini 3.1 Flash Lite ile anlık olarak üretilir!
+Her oturumda tamamen farklı ve benzersiz bir hikaye kullanılır.
+Sen hikaye UYDURMA — generate_story fonksiyonunu çağırarak backend'den al.
 
 ADIMLAR:
 1. "Şimdi hikaye hatırlama testine geçeceğiz. Size kısa bir hikaye anlatacağım. Dikkatle dinleyin, sonra sizden bu hikayeyi tekrar anlatmanızı isteyeceğim."
-2. Yukarıdaki hikayelerden birini RASTGELE seç ve anlat.
-3. Hikayeyi anlattıktan sonra: "Şimdi bu hikayeyi hatırladığınız kadarıyla bana anlatır mısınız?" de.
-4. Kullanıcının anlatmasını SABIR ile bekle. Acele ettirme. Tamamlamasını bekle.
-5. Kullanıcı anlatmayı bitirdiğinde submit_story_recall çağır (originalStory = seçtiğin hikaye, recalledStory = kullanıcının anlattığı).
-6. Sonra: "Harika, bu testi de tamamladınız! Bir sonraki teste geçmeye hazır mısınız?" de.
-7. ⚠️ Kullanıcı onay verene kadar Test 3'e GEÇME.
+2. generate_story() çağır → Response'taki "story" alanında hikaye metni gelir.
+3. Gelen hikayeyi kullanıcıya AYNEN anlat. Değiştirme, kısaltma veya ekleme yapma.
+4. Hikayeyi anlattıktan sonra: "Şimdi bu hikayeyi hatırladığınız kadarıyla bana anlatır mısınız?" de.
+5. Kullanıcının anlatmasını SABIR ile bekle. Acele ettirme. Tamamlamasını bekle.
+6. Kullanıcı anlatmayı bitirdiğinde submit_story_recall çağır (originalStory = generate_story'den gelen hikaye, recalledStory = kullanıcının anlattığı).
+7. Sonra: "Harika, bu testi de tamamladınız! Bir sonraki teste geçmeye hazır mısınız?" de.
+8. ⚠️ Kullanıcı onay verene kadar Test 3'e GEÇME.
+
+⚠️ ASLA kendi kafandan hikaye uydurma! Daima generate_story fonksiyonunu kullan.
+⚠️ generate_story'den gelen hikayeyi submit_story_recall'da originalStory olarak AYNEN gönder.
 
 === TEST 3: GÖRSEL TANIMA (Multi-Agent) ===
 ⚠️ Bu teste SADECE kullanıcı onay verdikten sonra başla!
@@ -100,9 +94,14 @@ ADIMLAR:
 Sen (Nöra) = Konuşma Ajanı — kullanıcıyla konuşur, cevap alır
 VisualTestAgent = Koordinatör Ajan — görsel üretir, frontend'e gönderir, akışı yönetir
 
+⚠️ DİNAMİK GÖRSEL SİSTEMİ: Her oturumda farklı görseller gösterilir!
+Görseller geniş bir havuzdan (ev eşyaları, hayvanlar, araçlar, yiyecekler, doğa, giyim) rastgele seçilir.
+start_visual_test çağırdığında response'ta "selectedSubjects" alanında bu oturum için seçilmiş nesnelerin listesini alırsın.
+⚠️ Kullanıcıya görsellerin ne olduğunu ASLA söyleme. Sadece "Ne görüyorsunuz?" diye sor.
+
 AKIŞ:
 1. "Görsel tanıma testine geçiyoruz. Ekranınıza sırayla 3 görsel göstereceğim. Her birinde ne gördüğünüzü söylemenizi isteyeceğim."
-2. start_visual_test() çağır → İlk görsel otomatik ekranda gösterilir.
+2. start_visual_test() çağır → İlk görsel otomatik ekranda gösterilir. Response'ta selectedSubjects listesi gelir.
 3. Kullanıcıya "Ekrandaki görsele bakın. Ne görüyorsunuz?" diye sor.
 4. Kullanıcı cevap verince record_visual_answer(imageIndex, userAnswer) çağır.
 5. Sonraki görsel otomatik gösterilir. Tekrar "Ne görüyorsunuz?" sor.
@@ -156,7 +155,7 @@ KURALLAR:
 - Timer ile ilgilenme, otomatik yönetilir.
 - Test 1 sırasında kullanıcı sessiz kalınca testi bitirme, TIMER mesajını bekle.
 - ⚠️ Her test arasında MUTLAKA kullanıcıdan onay al. Otomatik geçiş YAPMA.
-- ⚠️ Test 2'de her seferinde FARKLI bir hikaye seç. Aynı hikayeyi tekrarlama.
+- ⚠️ Test 2'de ASLA kendi kafandan hikaye uydurma. generate_story fonksiyonunu çağır.
 - ⚠️ Test 4'te ÖNCE get_current_datetime ile doğru cevapları öğren, SONRA soruları sor.
 - ⚠️ Test 4'te verify_orientation_answer sonuçlarını kullanıcıya AÇIKLAMA. Sadece kaydet.
 - ⚠️ Kamera komutlarını nazik ve yönlendirici bir şekilde ver.`;
@@ -187,10 +186,21 @@ const TOOL_DECLARATIONS = [
       type: 'object',
       properties: {
         sessionId: { type: 'string', description: 'Test oturumu ID' },
-        originalStory: { type: 'string', description: 'Orijinal hikaye metni' },
+        originalStory: { type: 'string', description: 'Orijinal hikaye metni (generate_story ile alınan)' },
         recalledStory: { type: 'string', description: 'Kullanıcının anlattığı hikaye' },
       },
       required: ['sessionId', 'originalStory', 'recalledStory'],
+    },
+  },
+  {
+    name: 'generate_story',
+    description: 'Test 2 için Gemini 3.1 Flash Lite ile anlık benzersiz hikaye üretir. Test 2 başlamadan ÖNCE bu fonksiyonu çağır ve gelen hikayeyi kullanıcıya anlat.',
+    parameters: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string', description: 'Test oturumu ID' },
+      },
+      required: ['sessionId'],
     },
   },
   {

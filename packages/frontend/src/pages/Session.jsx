@@ -4,6 +4,7 @@ import { Mic, MicOff, Brain, Volume2, Play, Loader2, Image, CheckCircle } from '
 import api from '../lib/api';
 import { useGeminiLive, SESSION_STATES } from '../hooks/useGeminiLive';
 import CameraPanel from '../components/CameraPanel';
+import GeneratedImagePanel from '../components/GeneratedImagePanel';
 
 const TEST_STEPS = [
   { id: 1, name: 'Sözel Akıcılık', key: 'verbal_fluency', description: 'Belirli bir harfle başlayan kelimeleri 60 saniye içinde söyleyin.' },
@@ -187,29 +188,7 @@ export default function Session() {
             </p>
           </div>
 
-          {/* Görsel Tanıma Testi - Üretilen Görsel */}
-          {currentTest === 'visual_recognition' && (
-            <div className="mb-8">
-              {imageGenerating ? (
-                <div className="flex flex-col items-center gap-3 p-6 bg-gray-50 rounded-xl border border-gray-200">
-                  <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
-                  <span className="text-sm text-gray-600">Görsel üretiliyor...</span>
-                </div>
-              ) : generatedImage ? (
-                <div className="relative">
-                  <img
-                    src={`data:${generatedImage.mimeType};base64,${generatedImage.data}`}
-                    alt={`Test Görseli ${generatedImage.imageIndex + 1}`}
-                    className="max-w-xs mx-auto rounded-xl shadow-lg border border-gray-200"
-                  />
-                  <div className="mt-3 flex items-center justify-center gap-2 text-primary-600">
-                    <Image className="w-4 h-4" />
-                    <span className="text-sm font-medium">Bu görselde ne görüyorsunuz?</span>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          )}
+          {/* Görsel Tanıma Testi - Fullscreen modal olarak gösteriliyor (sayfa sonunda render ediliyor) */}
 
           {/* Kamera paneli - Test 4 sırasında */}
           {cameraActive && (
@@ -342,6 +321,15 @@ export default function Session() {
           )}
         </div>
       </main>
+
+      {/* ─── Görsel Tanıma Modal (Fullscreen Overlay) ─── */}
+      {(generatedImage || imageGenerating) && (
+        <GeneratedImagePanel
+          image={generatedImage}
+          isGenerating={imageGenerating}
+          onClose={() => {}}
+        />
+      )}
     </div>
   );
 }

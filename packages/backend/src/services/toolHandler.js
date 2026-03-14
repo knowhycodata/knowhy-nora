@@ -13,6 +13,7 @@ const { scoreVerbalFluency } = require('./scoring/verbalFluency');
 const log = createLogger('ToolHandler');
 const { scoreStoryRecall } = require('./scoring/storyRecall');
 const { scoreVisualRecognition } = require('./scoring/visualRecognition');
+const { generateStory } = require('./storyGenerator');
 const { scoreOrientation } = require('./scoring/orientation');
 const { getImagePipeline } = require('./imageGenerator');
 const { getStaticTestImage } = require('./staticTestImages');
@@ -72,13 +73,9 @@ function getDateTimeAgent(sessionId) {
   return dateTimeAgents.get(sessionId);
 }
 
-// Multi-Agent: Test görselleri Imagen 4 Fast ile otomatik üretilir
-// API kota aşımında statik SVG görseller fallback olarak kullanılır
-const TEST_IMAGE_SUBJECTS = [
-  { index: 0, subject: 'saat', correctAnswer: 'saat' },
-  { index: 1, subject: 'anahtar', correctAnswer: 'anahtar' },
-  { index: 2, subject: 'kalem', correctAnswer: 'kalem' },
-];
+// Multi-Agent: Test 3 görselleri artık her session'da dinamik olarak seçilir.
+// Bkz: visualTestKeywords.js → selectRandomKeywords()
+// VisualTestAgent constructor'ında otomatik çağrılır.
 
 // Gemini session'ları takip et (Brain Agent için hala gerekli olabilir)
 const geminiSessions = new Map(); // sessionId -> GeminiLiveSession
@@ -97,6 +94,8 @@ async function handleToolCall(toolName, args, clientWs = null, sessionId = null)
       return await handleVerbalFluency(args);
     case 'submit_story_recall':
       return await handleStoryRecall(args);
+    case 'generate_story':
+      return await handleGenerateStory(args);
     case 'start_visual_test':
       return await handleStartVisualTest(args);
     case 'record_visual_answer':
@@ -180,6 +179,40 @@ async function handleStoryRecall({ sessionId, originalStory, recalledStory }) {
     success: true,
     message: `Hikaye hatırlama testi kaydedildi.`,
   };
+}
+
+/**
+ * Gemini 3.1 Flash Lite ile anlık hikaye üretimi
+ * Test 2 başlamadan önce çağrılır — Nöra'ya hikayeyi verir
+ */
+async function handleGenerateStory({ sessionId }) {
+  log.info('Hikaye üretimi istendi', { sessionId });
+
+  try {
+    const result = await generateStory();
+
+    log.info('Hikaye hazır', {
+      sessionId,
+      source: result.source,
+      model: result.model || 'fallback',
+      storyLength: result.story.length,
+    });
+
+    return {
+      success: true,
+      story: result.story,
+      source: result.source,
+      model: result.model || null,
+      message: `Hikaye ${result.source === 'ai' ? 'Gemini 3.1 Flash Lite ile üretildi' : 'havuzdan seçildi'}. Bu hikayeyi kullanıcıya anlat. Kullanıcı tekrar anlattıktan sonra submit_story_recall çağırırken originalStory olarak bu hikayeyi gönder.`,
+    };
+  } catch (error) {
+    log.error('Hikaye üretim hatası', { sessionId, error: error.message });
+    return {
+      success: false,
+      error: error.message,
+      message: 'Hikaye üretilemedi. Lütfen kendi bilgine dayanarak kısa bir hikaye anlat.',
+    };
+  }
 }
 
 /**
@@ -459,5 +492,4 @@ module.exports = {
   registerDateTimeAgent,
   unregisterDateTimeAgent,
   getDateTimeAgent,
-  TEST_IMAGE_SUBJECTS 
 };
