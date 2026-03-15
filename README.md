@@ -17,7 +17,7 @@
 | **Public Repository** | https://github.com/knowhycodata/knowhy_gemini_live_agent_challange |
 | **Live Demo** | https://nora-frontend-806414321712.us-central1.run.app |
 | **Backend API** | https://nora-backend-806414321712.us-central1.run.app |
-| **Demo Video (<4 min)** | *To be added after recording* |
+| **Demo Video** | *https://youtu.be/gtv1Bgd5Exc* | English Dubbed: https://youtu.be/m4iG0bB2zdI
 | **GCP Proof Video** | https://www.youtube.com/watch?v=10j1kAk4QTk | TURN ON SUBTITLES FOR ENGLISH.
 
 ---
@@ -371,7 +371,7 @@ This project was developed for **Gemini Hackathon 2026**.
 | **Public Repository** | https://github.com/knowhycodata/knowhy_gemini_live_agent_challange |
 | **Live Demo** | https://nora-frontend-806414321712.us-central1.run.app |
 | **Backend API** | https://nora-backend-806414321712.us-central1.run.app |
-| **Demo Video (<4 dk)** | *Kayıt sonrası eklenecek* |
+| **Demo Video (<4 dk)** | **https://youtu.be/gtv1Bgd5Exc* | İngilizce Dublaj: https://youtu.be/m4iG0bB2zdI
 | **GCP Proof Video** | https://www.youtube.com/watch?v=10j1kAk4QTk |
 
 ---
