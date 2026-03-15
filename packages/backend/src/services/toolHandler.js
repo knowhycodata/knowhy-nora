@@ -182,7 +182,35 @@ async function handleToolCall(toolName, args, clientWs = null, sessionId = null)
 
 async function handleVerbalFluency({ sessionId, words, targetLetter, durationSeconds }) {
   const language = getSessionLanguage(sessionId);
-  const result = scoreVerbalFluency(words, targetLetter);
+  const brainAgent = brainAgents.get(sessionId);
+
+  // Timer durmadan skor kaydı alınırsa UI ve test akışı tutarsızlaşır.
+  if (brainAgent?.timerActive) {
+    log.warn('submit_verbal_fluency engellendi - timer hala aktif', { sessionId });
+
+    if (typeof brainAgent.sendTextToLive === 'function') {
+      brainAgent.sendTextToLive(
+        pickText(
+          language,
+          'VERBAL_FLUENCY_GUARD: Timer hala aktif. submit_verbal_fluency cagrisini iptal et. Kullaniciyi dinlemeye devam et ve sadece TIMER_COMPLETE/TIMER_STOPPED mesaji geldikten sonra submit_verbal_fluency cagir.',
+          'VERBAL_FLUENCY_GUARD: The timer is still active. Cancel this submit_verbal_fluency call. Keep listening to the user and call submit_verbal_fluency only after a TIMER_COMPLETE/TIMER_STOPPED message.'
+        )
+      );
+    }
+
+    return {
+      success: false,
+      blocked: true,
+      reason: 'TIMER_ACTIVE',
+      message: pickText(
+        language,
+        'Timer hala aktif. Test 1 bitmeden skor kaydi alinamaz.',
+        'The timer is still active. Test 1 cannot be scored before it ends.'
+      ),
+    };
+  }
+
+  const result = scoreVerbalFluency(words, targetLetter, durationSeconds, language);
 
   await prisma.testResult.upsert({
     where: { sessionId_testType: { sessionId, testType: 'VERBAL_FLUENCY' } },

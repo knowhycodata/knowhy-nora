@@ -3,11 +3,21 @@
  * Kullanıcıdan belirli bir harfle başlayan kelimeleri 60 saniye içinde saymasını ister.
  * Skor: Geçerli benzersiz kelime sayısı
  */
-function scoreVerbalFluency(words, targetLetter, durationSeconds) {
-  const normalizedLetter = targetLetter.toLocaleLowerCase('tr');
+const { normalizeLanguage } = require('../../lib/language');
+
+function getLocale(language) {
+  return normalizeLanguage(language) === 'en' ? 'en-US' : 'tr-TR';
+}
+
+function scoreVerbalFluency(words, targetLetter, durationSeconds, language = 'tr') {
+  const locale = getLocale(language);
+  const normalizedLetter = String(targetLetter || '').trim().toLocaleLowerCase(locale);
+  const safeWords = Array.isArray(words) ? words : [];
 
   // Kelimeleri normalize et ve filtrele
-  const normalizedWords = words.map((w) => w.trim().toLocaleLowerCase('tr'));
+  const normalizedWords = safeWords
+    .map((w) => String(w || '').trim().toLocaleLowerCase(locale))
+    .filter((w) => w.length > 0);
 
   // Benzersiz kelimeler
   const uniqueWords = [...new Set(normalizedWords)];
@@ -33,7 +43,7 @@ function scoreVerbalFluency(words, targetLetter, durationSeconds) {
     score,
     maxScore,
     details: {
-      totalWordsSpoken: words.length,
+      totalWordsSpoken: safeWords.length,
       uniqueWords: uniqueWords.length,
       validWords,
       invalidWords,

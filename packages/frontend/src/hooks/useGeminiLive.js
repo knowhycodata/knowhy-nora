@@ -391,10 +391,7 @@ export function useGeminiLive() {
         log.info('Tool call', { name: message.name });
         if (message.name === 'start_timer') setCurrentTest('verbal_fluency');
         else if (message.name === 'stop_timer') { /* timer stopped - handled by timer_stopped event */ }
-        else if (message.name === 'submit_verbal_fluency') {
-          setCurrentTest('verbal_fluency_done');
-          // Ajan kullanıcıdan onay alınca story_recall tool call ile doğal geçiş yapacak
-        }
+        else if (message.name === 'submit_verbal_fluency') { /* done state tool_result başarısında set edilir */ }
         else if (message.name === 'submit_story_recall') {
           setCurrentTest('story_recall_done');
         }
@@ -425,7 +422,19 @@ export function useGeminiLive() {
         break;
 
       case 'tool_result':
-        if (message.name === 'start_visual_test') {
+        if (message.name === 'submit_verbal_fluency') {
+          const success = message.result?.success === true;
+          const blockedByTimer = message.result?.reason === 'TIMER_ACTIVE';
+          log.info('submit_verbal_fluency result', { success, blockedByTimer, result: message.result });
+
+          if (success) {
+            setCurrentTest('verbal_fluency_done');
+            setTimer((prev) => (prev ? { ...prev, active: false, remaining: prev.remaining ?? 0 } : prev));
+          } else if (blockedByTimer) {
+            setCurrentTest('verbal_fluency');
+          }
+        }
+        else if (message.name === 'start_visual_test') {
           log.info('start_visual_test result', { success: message.result?.success });
           // Görsel VisualTestAgent'tan visual_test_image event'i ile gelecek
         }

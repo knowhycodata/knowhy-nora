@@ -39,6 +39,10 @@ const KEYWORDS = {
     'süreyi durdur', 'sureyi durdur',
     'finish', 'stop now', 'enough', 'that is enough', 'i am done', "i'm done",
     'no more words', "i can't think of more", 'nothing else',
+    'thats all', "that's all", "that's it", 'thats it', 'i am finished',
+    "i'm finished", 'finished', 'done now', 'i have no more', 'no more',
+    'cannot think of more', "can't remember more", 'cant remember more',
+    'bu kadar yeter', 'daha fazla soyleyemiyorum', 'baska soyleyemiyorum',
   ],
   dangerWhileTimer: [
     'hikaye', 'test 2', 'ikinci test', 'testi tamamladınız', 'testi tamamladiniz',
@@ -72,6 +76,36 @@ const KEYWORDS = {
   ],
 };
 
+const COMMON_FILLER_WORDS = new Set([
+  'hmm', 'hmmm', 'hmmmm', 'umm', 'um', 'uh', 'aa', 'aaa', 'ee', 'eee', 'ah', 'oh',
+]);
+
+const FILLER_WORDS_BY_LANGUAGE = {
+  tr: new Set(['hım', 'hımm', 'hımmm', 'himm', 'ıı', 'ııı', 'ii', 'iii', 'sey', 'şey', 'yani', 'aslinda', 'aslında']),
+  en: new Set(['uhh', 'uhhh', 'ummm', 'erm', 'huh']),
+};
+
+function parsePositiveInt(value, fallback) {
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  return fallback;
+}
+
+function getLocale(language) {
+  return normalizeLanguage(language) === 'en' ? 'en-US' : 'tr-TR';
+}
+
+function normalizeForMatch(text, language) {
+  if (!text) return '';
+  return String(text)
+    .toLocaleLowerCase(getLocale(language))
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/['’`]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 class BrainAgent {
   constructor(sessionId, sendToClient, sendTextToLive, language = 'tr') {
     this.sessionId = sessionId;
@@ -89,6 +123,13 @@ class BrainAgent {
     this.timerDuration = 60;
     this.timerId = null;
     this.timerTimeout = null;
+    this.inactivityCheckInterval = null;
+    this.lastUserSpeechAt = null;
+    this.lastProgressAt = null;
+    this.inactivityWarningSent = false;
+    this.INACTIVITY_WARN_AFTER_MS = parsePositiveInt(process.env.TEST1_INACTIVITY_WARN_MS, 10000);
+    this.INACTIVITY_STOP_AFTER_MS = parsePositiveInt(process.env.TEST1_INACTIVITY_STOP_MS, 16000);
+    this.MIN_AUTO_STOP_ELAPSED_MS = parsePositiveInt(process.env.TEST1_AUTO_STOP_MIN_ELAPSED_MS, 20000);
 
     this.agentBuffer = '';
     this.userBuffer = '';
@@ -134,32 +175,32 @@ class BrainAgent {
   }
 
   _analyzePhase(role, text) {
-    const lowerText = text.toLowerCase();
-    const agentBuf = this.agentBuffer.toLowerCase();
-    const userBuf = this.userBuffer.toLowerCase();
+    const rawText = text;
+    const agentBuf = this.agentBuffer;
+    const userBuf = this.userBuffer;
 
     switch (this.testPhase) {
       case 'IDLE':
-        this._handleIdle(role, lowerText, agentBuf);
+        this._handleIdle(role, rawText, agentBuf);
         break;
       case 'VERBAL_FLUENCY_WAITING':
-        this._handleWaiting(role, lowerText, agentBuf, userBuf);
+        this._handleWaiting(role, rawText, agentBuf, userBuf);
         break;
       case 'VERBAL_FLUENCY_ACTIVE':
-        this._handleActive(role, lowerText, text);
+        this._handleActive(role, rawText, text, userBuf);
         break;
       case 'VERBAL_FLUENCY_DONE':
       case 'STORY_RECALL_ACTIVE':
-        this._handlePostTest1(role, lowerText, agentBuf);
+        this._handlePostTest1(role, rawText, agentBuf);
         break;
       case 'VISUAL_TEST_ACTIVE':
-        this._handleVisualTestActive(role, lowerText, text);
+        this._handleVisualTestActive(role, rawText, text);
         break;
       case 'VISUAL_TEST_DONE':
-        this._handlePostVisualTest(role, lowerText, agentBuf);
+        this._handlePostVisualTest(role, rawText, agentBuf);
         break;
       case 'ORIENTATION_ACTIVE':
-        this._handleOrientationActive(role, lowerText);
+        this._handleOrientationActive(role, rawText);
         break;
       default:
         break;
@@ -198,14 +239,19 @@ class BrainAgent {
     }
   }
 
-  _handleActive(role, text, rawText) {
+  _handleActive(role, text, rawText, userBuf = '') {
     if (role === 'user') {
-      if (this._containsAny(text, KEYWORDS.userStop)) {
+      this.lastUserSpeechAt = Date.now();
+      if (this._containsAny(text, KEYWORDS.userStop) || this._containsAny(userBuf, KEYWORDS.userStop)) {
         log.info('Stop sinyali algılandı', { sessionId: this.sessionId, text });
         this._stopTimer('user_stop');
         return;
       }
-      this._collectWords(rawText);
+      const addedWords = this._collectWords(rawText);
+      if (addedWords > 0) {
+        this.lastProgressAt = Date.now();
+        this.inactivityWarningSent = false;
+      }
       return;
     }
 
@@ -250,15 +296,28 @@ class BrainAgent {
 
   _collectWords(text) {
     const words = text.split(/[\s,\.;!?]+/).filter((w) => w.length > 1);
+    let addedWords = 0;
+    const locale = getLocale(this.language);
+    const languageFillers = FILLER_WORDS_BY_LANGUAGE[this.language] || FILLER_WORDS_BY_LANGUAGE.tr;
+
     for (const word of words) {
-      const clean = word.toLowerCase().trim();
-      if (clean.length > 1 && !this.collectedWords.includes(clean)) {
+      const clean = word
+        .toLocaleLowerCase(locale)
+        .replace(/^[^a-zA-ZÇĞİÖŞÜçğıöşü]+|[^a-zA-ZÇĞİÖŞÜçğıöşü]+$/g, '')
+        .trim();
+
+      if (clean.length <= 1 || COMMON_FILLER_WORDS.has(clean) || languageFillers.has(clean)) continue;
+
+      if (!this.collectedWords.includes(clean)) {
         this.collectedWords.push(clean);
+        addedWords += 1;
       }
     }
     if (words.length > 0) {
       log.debug('Kelimeler', { sessionId: this.sessionId, new: words, total: this.collectedWords.length });
     }
+
+    return addedWords;
   }
 
   _startTimer() {
@@ -269,6 +328,9 @@ class BrainAgent {
     this.timerId = `${Date.now()}_VF`;
     this.collectedWords = [];
     this.testPhase = 'VERBAL_FLUENCY_ACTIVE';
+    this.lastUserSpeechAt = null;
+    this.lastProgressAt = null;
+    this.inactivityWarningSent = false;
 
     this.sendToClient({
       type: 'timer_started',
@@ -280,12 +342,15 @@ class BrainAgent {
     this.timerTimeout = setTimeout(() => {
       if (this.timerActive) this._stopTimer('timeout');
     }, this.timerDuration * 1000);
+
+    this._startInactivityWatcher();
   }
 
   _stopTimer(reason) {
     if (!this.timerActive) return;
 
     this.timerActive = false;
+    this._stopInactivityWatcher();
     if (this.timerTimeout) {
       clearTimeout(this.timerTimeout);
       this.timerTimeout = null;
@@ -308,15 +373,21 @@ class BrainAgent {
     const letter = this.targetLetter || 'P';
     const prefix = isTimeout ? 'TIMER_COMPLETE' : 'TIMER_STOPPED';
     const wordJson = this.collectedWords.map((w) => `"${w}"`).join(', ');
+    const stopReasonTextTr = reason === 'auto_inactivity'
+      ? `Kullanici uzun sure sessiz kaldigi ve yeni kelime gelmedigi icin test otomatik durduruldu. ${elapsed} saniye gecti.`
+      : `Kullanici durdurmak istedi. ${elapsed} saniye gecti.`;
+    const stopReasonTextEn = reason === 'auto_inactivity'
+      ? `The test was automatically stopped due to prolonged silence and no new words. ${elapsed} seconds elapsed.`
+      : `The user asked to stop. ${elapsed} seconds elapsed.`;
 
     this.sendTextToLive(
       pickText(
         this.language,
-        `${prefix}: ${isTimeout ? '60 saniyelik sure doldu.' : `Kullanici durdurmak istedi. ${elapsed} saniye gecti.`} ` +
+        `${prefix}: ${isTimeout ? '60 saniyelik sure doldu.' : stopReasonTextTr} ` +
           `Kullanicinin soyledigi kelimeler: [${wordList}]. Toplam ${this.collectedWords.length} kelime. ` +
           `Simdi submit_verbal_fluency fonksiyonunu cagir. words: [${wordJson}], targetLetter: "${letter}", sessionId: "${this.sessionId}", durationSeconds: ${elapsed}. ` +
           'submit_verbal_fluency cagirdiktan sonra kullaniciya ikinci teste hazir olup olmadigini sor ve onay bekle.',
-        `${prefix}: ${isTimeout ? 'The 60-second timer is over.' : `The user asked to stop. ${elapsed} seconds elapsed.`} ` +
+        `${prefix}: ${isTimeout ? 'The 60-second timer is over.' : stopReasonTextEn} ` +
           `User words: [${wordList}]. Total ${this.collectedWords.length} words. ` +
           `Now call submit_verbal_fluency with words: [${wordJson}], targetLetter: "${letter}", sessionId: "${this.sessionId}", durationSeconds: ${elapsed}. ` +
           'After submit_verbal_fluency, ask whether the user is ready for Test 2 and wait for explicit confirmation.'
@@ -324,6 +395,54 @@ class BrainAgent {
     );
 
     this.testPhase = 'VERBAL_FLUENCY_DONE';
+  }
+
+  _startInactivityWatcher() {
+    this._stopInactivityWatcher();
+    this.inactivityCheckInterval = setInterval(() => {
+      this._checkAutoStopByInactivity();
+    }, 1000);
+  }
+
+  _stopInactivityWatcher() {
+    if (this.inactivityCheckInterval) {
+      clearInterval(this.inactivityCheckInterval);
+      this.inactivityCheckInterval = null;
+    }
+  }
+
+  _checkAutoStopByInactivity() {
+    if (!this.timerActive || !this.timerStartTime) return;
+    if (!this.lastUserSpeechAt) return;
+
+    const now = Date.now();
+    const elapsed = now - this.timerStartTime;
+    if (elapsed < this.MIN_AUTO_STOP_ELAPSED_MS) return;
+
+    const baseForProgress = this.lastProgressAt || this.lastUserSpeechAt;
+    const silenceMs = now - this.lastUserSpeechAt;
+    const noProgressMs = now - baseForProgress;
+
+    if (!this.inactivityWarningSent && silenceMs >= this.INACTIVITY_WARN_AFTER_MS) {
+      this.inactivityWarningSent = true;
+      this.sendTextToLive(
+        pickText(
+          this.language,
+          'TIMER_HINT: Kullanici bir suredir sessiz. Test 1 hala aktif. Kisa bir tesvik cumlesi kur: "Devam edebilirsiniz, sureniz devam ediyor."',
+          'TIMER_HINT: The user has been silent for a while. Test 1 is still active. Give a short encouragement: "You can continue, your time is still running."'
+        )
+      );
+      return;
+    }
+
+    if (silenceMs >= this.INACTIVITY_STOP_AFTER_MS && noProgressMs >= this.INACTIVITY_STOP_AFTER_MS) {
+      log.info('Timer otomatik durduruldu (inactivity)', {
+        sessionId: this.sessionId,
+        silenceMs,
+        noProgressMs,
+      });
+      this._stopTimer('auto_inactivity');
+    }
   }
 
   _handlePostTest1(role, text, agentBuf) {
@@ -397,6 +516,7 @@ class BrainAgent {
 
   destroy() {
     if (this.timerTimeout) clearTimeout(this.timerTimeout);
+    this._stopInactivityWatcher();
     if (this.bufferResetTimeout) clearTimeout(this.bufferResetTimeout);
     this.visualTestAgent = null;
     this.videoAnalysisAgent = null;
@@ -423,9 +543,9 @@ class BrainAgent {
 
   _containsAny(text, keywords) {
     if (!text) return false;
-    return keywords.some((keyword) => text.includes(keyword));
+    const normalizedText = normalizeForMatch(text, this.language);
+    return keywords.some((keyword) => normalizedText.includes(normalizeForMatch(keyword, this.language)));
   }
 }
 
 module.exports = { BrainAgent };
-

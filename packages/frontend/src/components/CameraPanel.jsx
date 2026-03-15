@@ -236,6 +236,14 @@ export default function CameraPanel({
     }
   };
 
+  const getAttentionDotClass = (level) => {
+    const normalized = String(level || '').toLowerCase();
+    if (normalized.includes('yüksek') || normalized.includes('yuksek') || normalized === 'high') return 'bg-emerald-400';
+    if (normalized.includes('orta') || normalized === 'medium') return 'bg-amber-400';
+    if (normalized.includes('düşük') || normalized.includes('dusuk') || normalized === 'low') return 'bg-red-400';
+    return 'bg-gray-400';
+  };
+
   if (!isActive) return null;
 
   return (
@@ -348,11 +356,7 @@ export default function CameraPanel({
           {lastAnalysis && cameraReady && (
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-3">
               <div className="flex items-center gap-2">
-                <div className={`w-1.5 h-1.5 rounded-full ${
-                  lastAnalysis.attentionLevel === 'yüksek' ? 'bg-emerald-400' :
-                  lastAnalysis.attentionLevel === 'orta' ? 'bg-amber-400' :
-                  lastAnalysis.attentionLevel === 'düşük' ? 'bg-red-400' : 'bg-gray-400'
-                }`} />
+                <div className={`w-1.5 h-1.5 rounded-full ${getAttentionDotClass(lastAnalysis.attentionLevel)}`} />
                 <span className="text-[10px] text-white/80">{lastAnalysis.summary}</span>
               </div>
             </div>

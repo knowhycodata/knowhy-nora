@@ -198,10 +198,13 @@ class CameraPresenceAgent {
 
     const eyeUnknown =
       typeof analysis.eyeContact === 'string' &&
-      analysis.eyeContact.toLowerCase().includes('tespit edilemedi');
+      (
+        analysis.eyeContact.toLowerCase().includes('tespit edilemedi') ||
+        analysis.eyeContact.toLowerCase().includes('not detected')
+      );
     const expressionUnknown =
-      (analysis.facialExpression || '').toLowerCase() === 'belirsiz';
-    const attentionUnknown = (analysis.attentionLevel || '').toLowerCase() === 'belirsiz';
+      ['belirsiz', 'unknown'].includes((analysis.facialExpression || '').toLowerCase());
+    const attentionUnknown = ['belirsiz', 'unknown'].includes((analysis.attentionLevel || '').toLowerCase());
     const lowConfidence = Number(analysis.confidence || 0) <= 0.35;
 
     if (expressionUnknown && eyeUnknown) return true;
