@@ -41,7 +41,7 @@
 
 | # | Bonus | Status | Proof |
 |---|---|---|---|
-| 1 | IaC / Automated Deployment | ✅ | [`deploy.sh`](deploy.sh) + [`cloudbuild.yaml`](cloudbuild.yaml) |
+| 1 | IaC / Automated Deployment | ✅ | [`deploy.sh`](deploy.sh) + [`deploy.ps1`](deploy.ps1) + [`cloudbuild.yaml`](cloudbuild.yaml) |
 | 2 | Blog/Podcast/Video | ✅ | https://knowhyco.substack.com/p/when-we-forget-what-we-have-forgotten |
 | 3 | GDG Membership | ✅ | https://gdg.community.dev/u/mc25pw |
 
@@ -69,6 +69,11 @@ Nöra provides a cognitive screening experience that progresses through natural 
 ---
 
 ## 🏗️ Architecture Diagram
+
+![Architecture Diagram](diagram.png)
+
+<details>
+<summary>Mermaid Source (click to expand)</summary>
 
 ```mermaid
 flowchart TB
@@ -101,6 +106,8 @@ flowchart TB
     BE --> SQL
     BE -.->|"Secrets"| SM
 ```
+
+</details>
 
 ---
 
@@ -335,7 +342,32 @@ gcloud run services update nora-backend --region $REGION --update-env-vars "FRON
 
 ---
 
-## 🔐 Security & Design Decisions
+## � Findings & Learnings
+
+### Technical Challenges
+
+1. **LLM Hallucination in Scoring**: Early experiments showed that Gemini would sometimes miscalculate test scores or invent metrics. We solved this by implementing **deterministic scoring** — the AI agent only collects data via tool calling, and all calculations happen algorithmically in the backend. This was the single most important architectural decision.
+
+2. **WebSocket Proxy Architecture**: Gemini Live API requires a persistent bidirectional connection. Browsers cannot directly connect to Gemini's WebSocket endpoint due to CORS and authentication constraints. We built a **Node.js WebSocket proxy** that maintains the Gemini session server-side while streaming audio to/from the client via a separate WebSocket channel.
+
+3. **Audio Pipeline Complexity**: Real-time audio streaming required careful handling of PCM encoding, sample rates, and buffer sizes. We used **AudioWorklet** (not the deprecated ScriptProcessorNode) for low-latency audio capture and playback, which significantly reduced audio glitches.
+
+4. **Multi-Agent Coordination**: Managing 5 concurrent agents (Nöra, BrainAgent, VisualTestAgent, DateTimeAgent, VideoAnalysisAgent + CameraPresenceAgent) required careful state synchronization. We solved race conditions by implementing a centralized state machine in BrainAgent that coordinates test transitions.
+
+5. **Timer Management**: LLMs have no reliable sense of time. Letting the AI manage test timers resulted in inconsistent durations. We moved timer logic entirely to BrainAgent with server-side `setTimeout`, injecting timer events as text messages into the Live API session.
+
+6. **Dynamic Content Generation**: Static test content (stories, images) would allow memorization. We integrated **Gemini 3.1 Flash Lite** for real-time story generation and **Imagen 4** for dynamic image generation, ensuring each session is unique.
+
+### Key Learnings
+
+- **Gemini Live API** is remarkably capable for natural, interruptible voice conversations — but it requires explicit, detailed system instructions to maintain consistent behavior across long sessions.
+- **Tool Calling** with Live API works well but requires sanitization of responses to prevent session instability from malformed JSON.
+- **Cloud Run session affinity** is essential for WebSocket-based applications — without it, connections get routed to different instances and break.
+- **Multi-language support** in voice agents requires careful prompt engineering — the agent's language behavior must be anchored in the system instruction, not left to inference.
+
+---
+
+## � Security & Design Decisions
 
 | Decision | Description |
 |---|---|
@@ -395,7 +427,7 @@ This project was developed for **Gemini Hackathon 2026**.
 
 | # | Bonus | Durum | Kanıt |
 |---|---|---|---|
-| 1 | IaC / Automated Deployment | ✅ | [`deploy.sh`](deploy.sh) + [`cloudbuild.yaml`](cloudbuild.yaml) |
+| 1 | IaC / Automated Deployment | ✅ | [`deploy.sh`](deploy.sh) + [`deploy.ps1`](deploy.ps1) + [`cloudbuild.yaml`](cloudbuild.yaml) |
 | 2 | Blog/Podcast/Video | ✅ | https://knowhyco.substack.com/p/when-we-forget-what-we-have-forgotten |
 | 3 | GDG Üyeliği | ✅ | https://gdg.community.dev/u/mc25pw |
 
@@ -423,6 +455,11 @@ Nöra, kullanıcı ile doğal konuşma akışında ilerleyen bir bilişsel taram
 ---
 
 ## 🏗️ Mimari Diyagramı
+
+![Mimari Diyagramı](diagram.png)
+
+<details>
+<summary>Mermaid Kaynak Kodu (görmek için tıklayın)</summary>
 
 ```mermaid
 flowchart TB
@@ -455,6 +492,8 @@ flowchart TB
     BE --> SQL
     BE -.->|"Gizli Anahtarlar"| SM
 ```
+
+</details>
 
 ---
 
@@ -686,6 +725,31 @@ gcloud run services update nora-backend --region $REGION --update-env-vars "FRON
 | **Frontend** | https://nora-frontend-806414321712.us-central1.run.app | ✅ Aktif |
 | **Backend** | https://nora-backend-806414321712.us-central1.run.app | ✅ Aktif |
 | **Health Check** | https://nora-backend-806414321712.us-central1.run.app/api/health | ✅ 200 OK |
+
+---
+
+## 💡 Bulgular ve Öğrenilenler
+
+### Teknik Zorluklar
+
+1. **LLM Halüsinasyonu ve Skorlama**: İlk denemelerde Gemini'nin test puanlarını yanlış hesapladığını veya olmayan metrikler uydurduğunu gözlemledik. Bunu **deterministik skorlama** ile çözdük — AI ajan yalnızca tool calling ile veri toplar, tüm hesaplamalar backend'de algoritmik olarak yapılır. Bu, en kritik mimari kararımız oldu.
+
+2. **WebSocket Proxy Mimarisi**: Gemini Live API kalıcı çift yönlü bağlantı gerektirir. Tarayıcılar CORS ve kimlik doğrulama kısıtlamaları nedeniyle Gemini'nin WebSocket endpoint'ine doğrudan bağlanamaz. Sunucu tarafında Gemini oturumunu yöneten bir **Node.js WebSocket proxy** inşa ettik.
+
+3. **Ses Pipeline Karmaşıklığı**: Gerçek zamanlı ses akışı; PCM kodlama, örnekleme hızları ve buffer boyutlarının dikkatli yönetimini gerektirdi. Düşük gecikmeli ses yakalama ve çalma için **AudioWorklet** kullandık (kullanımdan kaldırılan ScriptProcessorNode yerine), bu da ses aksaklıklarını önemli ölçüde azalttı.
+
+4. **Multi-Agent Koordinasyonu**: 5 eşzamanlı ajanı (Nöra, BrainAgent, VisualTestAgent, DateTimeAgent, VideoAnalysisAgent + CameraPresenceAgent) yönetmek dikkatli durum senkronizasyonu gerektirdi. Yarış koşullarını BrainAgent'ta merkezi bir durum makinesi uygulayarak çözdük.
+
+5. **Zamanlayıcı Yönetimi**: LLM'lerin güvenilir bir zaman algısı yoktur. AI'ya test zamanlayıcılarını yönettirmek tutarsız sürelere yol açtı. Zamanlayıcı mantığını tamamen BrainAgent'a taşıdık ve sunucu tarafı `setTimeout` ile yönettik; zamanlayıcı olaylarını Live API oturumuna metin mesajları olarak enjekte ettik.
+
+6. **Dinamik İçerik Üretimi**: Statik test içeriği (hikayeler, görseller) ezberlemeye olanak tanırdı. Gerçek zamanlı hikaye üretimi için **Gemini 3.1 Flash Lite**, dinamik görsel üretimi için **Imagen 4** entegre ettik; böylece her oturum benzersiz oldu.
+
+### Temel Öğrenimler
+
+- **Gemini Live API** doğal, kesintiye dayanıklı sesli konuşmalar için oldukça yetenekli — ancak uzun oturumlarda tutarlı davranış için açık ve detaylı system instruction gerektirir.
+- **Tool Calling** Live API ile iyi çalışır ancak hatalı JSON'dan kaynaklanan oturum kararsızlığını önlemek için yanıt sanitizasyonu gerektirir.
+- **Cloud Run session affinity** WebSocket tabanlı uygulamalar için zorunludur — aksi halde bağlantılar farklı instance'lara yönlendirilir ve kopar.
+- **Çok dilli destek** sesli ajanlarda dikkatli prompt mühendisliği gerektirir — ajanın dil davranışı system instruction'da sabitlenmeli, çıkarıma bırakılmamalıdır.
 
 ---
 
