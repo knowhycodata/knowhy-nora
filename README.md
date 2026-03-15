@@ -4,7 +4,11 @@
 >
 > Real-time voice-visual interactive pre-screening AI agent for Alzheimer's and cognitive decline risk.
 
+**🌐 Language / Dil:** [English](#english) | [Türkçe](#türkçe)
+
 ---
+
+<a name="english"></a>
 
 ## 📋 Competition Submission Links
 
@@ -349,6 +353,8 @@ This project was developed for **Gemini Hackathon 2026**.
 ---
 
 ---
+
+<a name="türkçe"></a>
 
 # Nöra - Bilişsel Tarama AI Asistanı
 
