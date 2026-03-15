@@ -17,7 +17,7 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
+        proxy_set_header Host $proxy_host;
         proxy_cache_bypass $http_upgrade;
     }
 
@@ -27,7 +27,7 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
+        proxy_set_header Host $proxy_host;
         proxy_read_timeout 86400;
         proxy_send_timeout 86400;
     }
@@ -44,7 +44,6 @@ server {
     }
 
     # Güvenlik header'ları
-    add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), fullscreen=(self)" always;
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;
