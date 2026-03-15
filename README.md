@@ -111,7 +111,7 @@ gemini_challenge/
 ├── packages/
 │   ├── frontend/          # React + Vite + TailwindCSS
 │   └── backend/           # Node.js + Express + Prisma
-├── deploy-gcp.sh          # ⭐ IaC: Automated GCP deploy script
+├── deploy.sh/ps1          # ⭐ IaC: Automated GCP deploy script
 ├── cloudbuild.yaml        # ⭐ IaC: Cloud Build CI/CD pipeline
 ├── docker-compose.yml     # Local development
 ├── .env.example           # Environment variables template
@@ -181,7 +181,7 @@ docker-compose up -d
 
 ### Method 1: Automated Deploy Script (⭐ Bonus: IaC)
 
-**File:** [`deploy-gcp.sh`](deploy-gcp.sh)
+**File:** [`deploy.sh/ps1`](deploy.sh/ps1)
 
 Sets up entire GCP infrastructure with a single command:
 
@@ -197,7 +197,7 @@ export JWT_SECRET="YOUR_JWT_SECRET"
 export DB_PASSWORD="STRONG_DB_PASSWORD"
 
 # 3. Run deploy script
-bash deploy-gcp.sh
+bash deploy.sh/ps1
 ```
 
 The script automatically:
@@ -465,7 +465,7 @@ gemini_challenge/
 ├── packages/
 │   ├── frontend/          # React + Vite + TailwindCSS
 │   └── backend/           # Node.js + Express + Prisma
-├── deploy-gcp.sh          # ⭐ IaC: Otomatik GCP deploy scripti
+├── deploy.sh/ps1          # ⭐ IaC: Otomatik GCP deploy scripti
 ├── cloudbuild.yaml        # ⭐ IaC: Cloud Build CI/CD pipeline
 ├── docker-compose.yml     # Lokal geliştirme
 ├── .env.example           # Environment variables şablonu
@@ -535,7 +535,7 @@ docker-compose up -d
 
 ### Yöntem 1: Otomatik Deploy Script (⭐ Bonus: IaC)
 
-**Dosya:** [`deploy-gcp.sh`](deploy-gcp.sh)
+**Dosya:** [`deploy.sh/ps1`](deploy.sh/ps1)
 
 Tek komutla tüm GCP altyapısını kurar:
 
@@ -551,7 +551,7 @@ export JWT_SECRET="YOUR_JWT_SECRET"
 export DB_PASSWORD="STRONG_DB_PASSWORD"
 
 # 3. Deploy scriptini çalıştır
-bash deploy-gcp.sh
+bash deploy.sh/ps1
 ```
 
 Script şunları otomatik yapar:

@@ -8,10 +8,46 @@ import { createLogger } from '../lib/logger';
 
 const log = createLogger('useGeminiLive');
 
+function normalizeWsUrl(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return null;
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.startsWith('/')) {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}${trimmed}`;
+  }
+
+  const malformedPrefixMatch = trimmed.match(/^(wss?:\/\/)(https?:\/\/.+)$/i);
+  const candidateUrl = malformedPrefixMatch ? malformedPrefixMatch[2] : trimmed;
+
+  try {
+    const parsed = new URL(candidateUrl, window.location.origin);
+
+    if (parsed.protocol === 'ws:' || parsed.protocol === 'wss:') {
+      return `${parsed.protocol}//${parsed.host}${parsed.pathname}${parsed.search}${parsed.hash}`;
+    }
+
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      const wsProtocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${wsProtocol}//${parsed.host}${parsed.pathname}${parsed.search}${parsed.hash}`;
+    }
+  } catch (error) {
+    return null;
+  }
+
+  return null;
+}
+
 function resolveWsUrl() {
-  const envWsUrl = import.meta.env.VITE_WS_URL;
-  if (envWsUrl && envWsUrl.trim().length > 0) {
-    return envWsUrl.trim();
+  const rawEnvWsUrl = import.meta.env.VITE_WS_URL;
+  const envWsUrl = normalizeWsUrl(rawEnvWsUrl);
+  if (envWsUrl) {
+    return envWsUrl;
+  }
+
+  if (rawEnvWsUrl && rawEnvWsUrl.trim().length > 0) {
+    log.warn('Invalid VITE_WS_URL ignored, falling back to auto URL', { rawEnvWsUrl });
   }
 
   const apiBase = import.meta.env.VITE_API_URL || '/api';

@@ -9,7 +9,7 @@ RUN npm install
 COPY . .
 
 # Build-time env vars (Cloud Run deploy sırasında --build-arg ile verilir)
-ARG VITE_API_URL=http://localhost:3001/api
+ARG VITE_API_URL=/api
 ARG VITE_WS_URL=""
 ARG VITE_GOOGLE_API_KEY=""
 ARG VITE_GEMINI_LIVE_MODEL=gemini-2.5-flash-native-audio-preview-12-2025

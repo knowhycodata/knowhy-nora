@@ -27,6 +27,10 @@ steps:
     id: 'build-frontend'
     args:
       - 'build'
+      - '--build-arg'
+      - 'VITE_API_URL=/api'
+      - '--build-arg'
+      - 'VITE_WS_URL='
       - '-t'
       - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/nora-frontend:${SHORT_SHA}'
       - '-t'
