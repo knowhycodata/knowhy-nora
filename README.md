@@ -18,7 +18,7 @@
 | **Live Demo** | https://nora-frontend-806414321712.us-central1.run.app |
 | **Backend API** | https://nora-backend-806414321712.us-central1.run.app |
 | **Demo Video (<4 min)** | *To be added after recording* |
-| **GCP Proof Video** | *To be added after recording* |
+| **GCP Proof Video** | https://www.youtube.com/watch?v=10j1kAk4QTk | TURN ON SUBTITLES FOR ENGLISH.
 
 ---
 
@@ -41,9 +41,9 @@
 
 | # | Bonus | Status | Proof |
 |---|---|---|---|
-| 1 | IaC / Automated Deployment | ✅ | [`deploy-gcp.sh`](deploy-gcp.sh) + [`cloudbuild.yaml`](cloudbuild.yaml) |
+| 1 | IaC / Automated Deployment | ✅ | [`deploy.sh`](deploy.sh) + [`cloudbuild.yaml`](cloudbuild.yaml) |
 | 2 | Blog/Podcast/Video | ✅ | https://knowhyco.substack.com/p/when-we-forget-what-we-have-forgotten |
-| 3 | GDG Membership | ❌ | - |
+| 3 | GDG Membership | ✅ | https://gdg.community.dev/u/mc25pw |
 
 ---
 
@@ -372,7 +372,7 @@ This project was developed for **Gemini Hackathon 2026**.
 | **Live Demo** | https://nora-frontend-806414321712.us-central1.run.app |
 | **Backend API** | https://nora-backend-806414321712.us-central1.run.app |
 | **Demo Video (<4 dk)** | *Kayıt sonrası eklenecek* |
-| **GCP Proof Video** | *Kayıt sonrası eklenecek* |
+| **GCP Proof Video** | https://www.youtube.com/watch?v=10j1kAk4QTk |
 
 ---
 
@@ -395,9 +395,9 @@ This project was developed for **Gemini Hackathon 2026**.
 
 | # | Bonus | Durum | Kanıt |
 |---|---|---|---|
-| 1 | IaC / Automated Deployment | ✅ | [`deploy-gcp.sh`](deploy-gcp.sh) + [`cloudbuild.yaml`](cloudbuild.yaml) |
+| 1 | IaC / Automated Deployment | ✅ | [`deploy.sh`](deploy.sh) + [`cloudbuild.yaml`](cloudbuild.yaml) |
 | 2 | Blog/Podcast/Video | ✅ | https://knowhyco.substack.com/p/when-we-forget-what-we-have-forgotten |
-| 3 | GDG Üyeliği | ❌ | - |
+| 3 | GDG Üyeliği | ✅ | https://gdg.community.dev/u/mc25pw |
 
 ---
 
