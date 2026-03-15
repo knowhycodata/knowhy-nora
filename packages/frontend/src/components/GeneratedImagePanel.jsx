@@ -6,10 +6,12 @@
  * Imagen 4 Fast ile üretilen veya fallback SVG görselleri gösterir.
  */
 import { useState, useEffect } from 'react';
+import { useLanguage } from '../context/LanguageContext';
 
 export default function GeneratedImagePanel({ image, isGenerating, onClose }) {
   const [animateIn, setAnimateIn] = useState(false);
   const [zoomed, setZoomed] = useState(false);
+  const { t } = useLanguage();
 
   const hasFallback = image && image.fallback && !image.data;
   const totalImages = image?.totalImages || 3;
@@ -54,8 +56,8 @@ export default function GeneratedImagePanel({ image, isGenerating, onClose }) {
                   </svg>
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-900">Görsel Tanıma Testi</h3>
-                  <p className="text-[11px] text-gray-400">Ekrandaki görseli inceleyin</p>
+                  <h3 className="text-sm font-semibold text-gray-900">{t('visualPanel.title')}</h3>
+                  <p className="text-[11px] text-gray-400">{t('visualPanel.subtitle')}</p>
                 </div>
               </div>
 
@@ -103,10 +105,10 @@ export default function GeneratedImagePanel({ image, isGenerating, onClose }) {
                   </div>
                 </div>
                 <p className="text-gray-500 text-sm font-medium mt-5 animate-pulse">
-                  Görsel hazırlanıyor...
+                  {t('visualPanel.preparing')}
                 </p>
                 <p className="text-gray-300 text-[11px] mt-1">
-                  Imagen 4 ile üretiliyor
+                  {t('visualPanel.generatedWith')}
                 </p>
               </div>
             )}
@@ -121,8 +123,8 @@ export default function GeneratedImagePanel({ image, isGenerating, onClose }) {
                     <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
                   </svg>
                 </div>
-                <p className="text-base font-semibold text-gray-700">Görsel {currentIndex}</p>
-                <p className="text-xs text-gray-400 mt-1.5">Bu görseli hayal edin ve tanımlayın</p>
+                <p className="text-base font-semibold text-gray-700">{t('visualPanel.image', { index: currentIndex })}</p>
+                <p className="text-xs text-gray-400 mt-1.5">{t('visualPanel.imagineHint')}</p>
               </div>
             )}
 
@@ -136,7 +138,7 @@ export default function GeneratedImagePanel({ image, isGenerating, onClose }) {
               >
                 <img
                   src={`data:${image.mimeType};base64,${image.data}`}
-                  alt={`Test Görseli ${currentIndex}`}
+                  alt={t('visualPanel.image', { index: currentIndex })}
                   className={`w-full object-contain rounded-2xl transition-all duration-500 bg-gray-50 ${
                     zoomed ? 'max-h-[70vh] scale-105' : 'max-h-72'
                   }`}
@@ -180,15 +182,15 @@ export default function GeneratedImagePanel({ image, isGenerating, onClose }) {
                   </svg>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-gray-700">Bu görselde ne görüyorsunuz?</p>
-                  <p className="text-[10px] text-gray-400 mt-0.5">Sesli olarak cevaplayın</p>
+                  <p className="text-xs font-medium text-gray-700">{t('visualPanel.question')}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{t('visualPanel.answerHint')}</p>
                 </div>
               </div>
 
               {/* AI badge */}
               <div className="flex items-center justify-center mt-3">
                 <span className="text-[10px] text-gray-300 flex items-center gap-1">
-                  {image.generatedByAI ? 'Imagen 4 ile' : 'Statik'} görsel
+                  {image.generatedByAI ? t('visualPanel.aiImage') : t('visualPanel.staticImage')}
                 </span>
               </div>
             </div>

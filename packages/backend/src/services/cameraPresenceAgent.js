@@ -11,14 +11,16 @@
  */
 
 const { createLogger } = require('../lib/logger');
+const { normalizeLanguage, pickText } = require('../lib/language');
 
 const log = createLogger('CameraPresenceAgent');
 
 class CameraPresenceAgent {
-  constructor(sessionId, sendToClient, sendTextToLive) {
+  constructor(sessionId, sendToClient, sendTextToLive, language = 'tr') {
     this.sessionId = sessionId;
     this.sendToClient = sendToClient;
     this.sendTextToLive = sendTextToLive;
+    this.language = normalizeLanguage(language);
 
     this.isActive = false;
     this.missingStreak = 0;
@@ -46,11 +48,11 @@ class CameraPresenceAgent {
       type: 'camera_presence_status',
       status: 'monitoring',
       level: 'info',
-      message: 'Kamera kadraj takibi aktif.',
+      message: pickText(this.language, 'Kamera kadraj takibi aktif.', 'Camera framing monitor is active.'),
     });
 
     log.info('Kamera kadraj takibi baslatildi', { sessionId: this.sessionId });
-    return { success: true, message: 'Kamera kadraj takibi aktif.' };
+    return { success: true, message: pickText(this.language, 'Kamera kadraj takibi aktif.', 'Camera framing monitor is active.') };
   }
 
   stopMonitoring() {
@@ -69,7 +71,7 @@ class CameraPresenceAgent {
       type: 'camera_presence_status',
       status: 'stopped',
       level: 'info',
-      message: 'Kamera kadraj takibi durduruldu.',
+      message: pickText(this.language, 'Kamera kadraj takibi durduruldu.', 'Camera framing monitor is stopped.'),
     });
 
     log.info('Kamera kadraj takibi durduruldu', {
@@ -116,7 +118,11 @@ class CameraPresenceAgent {
     this.sendToClient({
       type: 'camera_presence_alert',
       level: 'warning',
-      message: 'Kadrajdan cikmis gorunuyorsunuz. Lutfen kameraya geri donun.',
+      message: pickText(
+        this.language,
+        'Kadrajdan cikmis gorunuyorsunuz. Lutfen kameraya geri donun.',
+        'You seem out of frame. Please move back into camera view.'
+      ),
     });
 
     // Kamera goruntusunu toparlamak icin merkezleme komutu.
@@ -127,8 +133,11 @@ class CameraPresenceAgent {
     });
 
     this.sendTextToLive(
-      'VIDEO_ANALYSIS: Kullanici bir suredir kadrajda gorunmuyor. ' +
-      'Lutfen nazikce kameraya geri donmesini iste ve Test 4 akisina ondan sonra devam et.'
+      pickText(
+        this.language,
+        'VIDEO_ANALYSIS: Kullanici bir suredir kadrajda gorunmuyor. Lutfen nazikce kameraya geri donmesini iste ve Test 4 akisina ondan sonra devam et.',
+        'VIDEO_ANALYSIS: The user has been out of frame for a while. Kindly ask them to return to frame, then continue Test 4.'
+      )
     );
 
     log.warn('Kamera kadraj kaybi algilandi, mudahale tetiklendi', {
@@ -144,11 +153,15 @@ class CameraPresenceAgent {
     this.sendToClient({
       type: 'camera_presence_recovered',
       level: 'info',
-      message: 'Tekrar kadrajdasiniz. Teste devam edebiliriz.',
+      message: pickText(this.language, 'Tekrar kadrajdasiniz. Teste devam edebiliriz.', 'You are back in frame. We can continue the test.'),
     });
 
     this.sendTextToLive(
-      'VIDEO_ANALYSIS: Kullanici tekrar kadrajda. Test akisina devam edebilirsin.'
+      pickText(
+        this.language,
+        'VIDEO_ANALYSIS: Kullanici tekrar kadrajda. Test akisina devam edebilirsin.',
+        'VIDEO_ANALYSIS: The user is back in frame. You can continue the test flow.'
+      )
     );
 
     log.info('Kamera kadrajina geri donus algilandi', {

@@ -9,6 +9,7 @@
 
 const { GoogleGenAI, Modality } = require('@google/genai');
 const { createLogger } = require('../lib/logger');
+const { normalizeLanguage, isEnglish, pickText } = require('../lib/language');
 
 const log = createLogger('GeminiLive');
 
@@ -22,7 +23,7 @@ if (!GOOGLE_API_KEY) {
 
 const ai = new GoogleGenAI({ apiKey: GOOGLE_API_KEY });
 
-const SYSTEM_INSTRUCTION = `Sen "Nöra" adında Türkçe konuşan bir bilişsel tarama asistanısın.
+const BASE_SYSTEM_INSTRUCTION_TR = `Sen "Nöra" adında Türkçe konuşan bir bilişsel tarama asistanısın.
 
 KİMLİĞİN:
 - Adın Nöra. Sıcak, empatik ve profesyonel bir ses tonun var.
@@ -161,6 +162,104 @@ KURALLAR:
 - ⚠️ Test 4'te ÖNCE get_current_datetime ile doğru cevapları öğren, SONRA soruları sor.
 - ⚠️ Test 4'te verify_orientation_answer sonuçlarını kullanıcıya AÇIKLAMA. Sadece kaydet.
 - ⚠️ Kamera komutlarını nazik ve yönlendirici bir şekilde ver.`;
+
+const BASE_SYSTEM_INSTRUCTION_EN = `You are a cognitive screening assistant named "Nora". You must speak in English only.
+
+IDENTITY:
+- Your name is Nora. You are warm, empathetic, and professional.
+- You are a screening assistant, not a doctor.
+- You do not diagnose. You guide the user through tests and tool calls.
+- Keep responses short, clear, and supportive.
+
+WELCOME FLOW:
+- Greet the user warmly.
+- Introduce yourself briefly.
+- Ask how they feel.
+- Do not start tests until the user is ready.
+
+########## CRITICAL RULE: TIMER MANAGEMENT ##########
+Timer control is automatic and handled by Brain Agent.
+Never start/stop timer manually.
+
+During Test 1:
+- After saying "Your letter is X. Your time has started, you may begin.", stay mostly silent.
+- Do not end Test 1 because of pauses.
+- Do not switch to Test 2 until you receive TIMER_COMPLETE: or TIMER_STOPPED: message.
+- If long silence happens, encourage briefly: "You can continue, your time is still running."
+
+When a message starts with TIMER_COMPLETE: or TIMER_STOPPED::
+- This is a control message from Brain Agent.
+- Call submit_verbal_fluency immediately with provided words/letter.
+- Congratulate the user.
+- Ask if they are ready for Test 2.
+- Wait for explicit confirmation before moving on.
+
+=== TEST 1: VERBAL FLUENCY ===
+1. Explain: user will say as many words as possible starting with one letter in 60 seconds.
+2. Wait for readiness confirmation.
+3. Pick a letter and announce: "Your letter is [LETTER]. Your time has started, you may begin."
+4. Keep listening while user speaks.
+5. Wait for TIMER message before ending Test 1.
+
+=== TEST 2: STORY RECALL ===
+- Start only after user confirmation.
+- Never invent stories yourself.
+- Always call generate_story to receive a unique story.
+1. Explain the test.
+2. Call generate_story.
+3. Tell the returned story exactly as provided.
+4. Ask user to retell.
+5. After user finishes, call submit_story_recall with originalStory and recalledStory.
+6. Ask readiness for Test 3 and wait for confirmation.
+
+=== TEST 3: VISUAL RECOGNITION (Multi-Agent) ===
+- Start only after user confirmation.
+- Use start_visual_test and record_visual_answer.
+- Never use generate_test_image.
+Flow:
+1. Explain that 3 images will be shown.
+2. Call start_visual_test.
+3. Ask: "What do you see on the screen?"
+4. After each answer call record_visual_answer.
+5. When complete, call submit_visual_recognition.
+6. Ask readiness for Test 4 and wait for confirmation.
+
+=== TEST 4: ORIENTATION (Multi-Agent + Video) ===
+- Start only after user confirmation.
+Flow:
+1. Explain final test briefly.
+2. Call get_current_datetime first.
+3. Call start_video_analysis.
+4. Ask orientation questions one by one:
+   - day, month, year, season, city, country, approximate time
+5. After each answer, call verify_orientation_answer.
+6. Do not reveal correctness to user.
+7. After all questions, call stop_video_analysis.
+8. Call submit_orientation.
+
+Camera guidance:
+- If face not visible, call send_camera_command('center') and ask user to face camera.
+- If too far, call send_camera_command('zoom_in').
+- If too close, call send_camera_command('zoom_out').
+- Messages prefixed with VIDEO_ANALYSIS: are control messages from helper agents; follow them.
+
+=== FINISH ===
+- Call complete_session.
+- Thank the user warmly.
+
+GLOBAL RULES:
+- Never calculate score yourself.
+- Always rely on tool calls for recording/scoring.
+- Always ask user confirmation between tests.
+- In Test 2, always use generate_story.
+- In Test 4, get date/time first, then ask questions.
+- Never disclose verify_orientation_answer correctness to user.`;
+
+function buildSystemInstruction(language = 'tr') {
+  return isEnglish(normalizeLanguage(language))
+    ? BASE_SYSTEM_INSTRUCTION_EN
+    : BASE_SYSTEM_INSTRUCTION_TR;
+}
 
 const TOOL_DECLARATIONS = [
   {
@@ -358,13 +457,14 @@ const TOOL_DECLARATIONS = [
  * Gemini Live oturumu oluşturur ve yönetir
  */
 class GeminiLiveSession {
-  constructor(clientWs, sessionId, onToolCall) {
+  constructor(clientWs, sessionId, onToolCall, options = {}) {
     this.clientWs = clientWs;
     this.sessionId = sessionId;
     this.onToolCall = onToolCall;
     this.geminiSession = null;
     this.isConnected = false;
     this.brainAgent = null; // Brain Agent dışarıdan set edilir
+    this.language = normalizeLanguage(options.language);
   }
 
   async connect() {
@@ -385,7 +485,7 @@ class GeminiLiveSession {
           },
         },
         systemInstruction: {
-          parts: [{ text: SYSTEM_INSTRUCTION }],
+          parts: [{ text: buildSystemInstruction(this.language) }],
         },
         tools: [{ functionDeclarations: TOOL_DECLARATIONS }],
         inputAudioTranscription: {},
@@ -423,7 +523,11 @@ class GeminiLiveSession {
       // Otomatik başlangıç - Nöra sıcak bir şekilde karşılasın
       log.info('Sending initial greeting', { sessionId: this.sessionId });
       this.geminiSession.sendRealtimeInput({
-        text: 'Kullanıcı yeni bağlandı. Kendini tanıt ve nasıl olduğunu sor. Henüz teste başlama, önce sohbet et ve kullanıcıyı rahatlat.',
+        text: pickText(
+          this.language,
+          'Kullanıcı yeni bağlandı. Kendini tanıt ve nasıl olduğunu sor. Henüz teste başlama, önce sohbet et ve kullanıcıyı rahatlat.',
+          'A new user has connected. Introduce yourself and ask how they are feeling. Do not start tests yet; first have a short warm-up conversation.'
+        ),
       });
       
       return true;
@@ -674,5 +778,5 @@ class GeminiLiveSession {
 module.exports = {
   GeminiLiveSession,
   TOOL_DECLARATIONS,
-  SYSTEM_INSTRUCTION,
+  buildSystemInstruction,
 };

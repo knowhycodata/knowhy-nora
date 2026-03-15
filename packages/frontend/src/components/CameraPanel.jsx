@@ -11,6 +11,7 @@
  * - Frame capture ve WS üzerinden gönderim
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useLanguage } from '../context/LanguageContext';
 
 const FRAME_CAPTURE_INTERVAL = 5000; // 5 saniyede bir frame gönder
 const FRAME_QUALITY = 0.6; // JPEG kalitesi (0-1)
@@ -25,6 +26,7 @@ export default function CameraPanel({
   variant = 'inline',
   presenceAlert = null,
 }) {
+  const { t } = useLanguage();
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
@@ -84,8 +86,8 @@ export default function CameraPanel({
       console.error('Kamera hatası:', err);
       setCameraError(
         err.name === 'NotAllowedError' 
-          ? 'Kamera izni reddedildi. Lütfen tarayıcı ayarlarından izin verin.'
-          : 'Kamera açılamadı: ' + err.message
+          ? t('camera.permissionDenied')
+          : t('camera.openError', { error: err.message })
       );
     }
     })().finally(() => {
@@ -93,7 +95,7 @@ export default function CameraPanel({
     });
 
     return startCameraPromiseRef.current;
-  }, [cameraReady]);
+  }, [cameraReady, t]);
 
   // Kamera kapat
   const stopCamera = useCallback(() => {
@@ -205,19 +207,32 @@ export default function CameraPanel({
   // Dikkat seviyesi rengi
   const getAttentionColor = (level) => {
     switch (level) {
-      case 'yüksek': return 'text-emerald-500';
-      case 'orta': return 'text-amber-500';
-      case 'düşük': return 'text-red-500';
+      case 'yüksek':
+      case 'high':
+        return 'text-emerald-500';
+      case 'orta':
+      case 'medium':
+        return 'text-amber-500';
+      case 'düşük':
+      case 'low':
+        return 'text-red-500';
       default: return 'text-gray-400';
     }
   };
 
-  const getAttentionBg = (level) => {
+  const getAttentionLabel = (level) => {
     switch (level) {
-      case 'yüksek': return 'bg-emerald-50 border-emerald-200';
-      case 'orta': return 'bg-amber-50 border-amber-200';
-      case 'düşük': return 'bg-red-50 border-red-200';
-      default: return 'bg-gray-50 border-gray-200';
+      case 'yüksek':
+      case 'high':
+        return t('camera.attentionLevels.high');
+      case 'orta':
+      case 'medium':
+        return t('camera.attentionLevels.medium');
+      case 'düşük':
+      case 'low':
+        return t('camera.attentionLevels.low');
+      default:
+        return t('camera.attentionLevels.unknown');
     }
   };
 
@@ -237,7 +252,7 @@ export default function CameraPanel({
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full ${cameraReady ? 'bg-emerald-500 animate-pulse' : 'bg-gray-300'}`} />
             <span className="text-xs font-medium text-gray-600">
-              {cameraReady ? 'Kamera aktif' : cameraError ? 'Kamera hatası' : 'Kamera başlatılıyor...'}
+              {cameraReady ? t('camera.active') : cameraError ? t('camera.error') : t('camera.starting')}
             </span>
           </div>
           <div className="flex items-center gap-1">
@@ -247,7 +262,7 @@ export default function CameraPanel({
                 <button
                   onClick={() => setZoom(prev => Math.max(1.0, prev - 0.5))}
                   className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all"
-                  title="Uzaklaş"
+                  title={t('camera.zoomOut')}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="8" x2="14" y1="11" y2="11"/>
@@ -257,7 +272,7 @@ export default function CameraPanel({
                 <button
                   onClick={() => setZoom(prev => Math.min(3.0, prev + 0.5))}
                   className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all"
-                  title="Yakınlaş"
+                  title={t('camera.zoomIn')}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="11" x2="11" y1="8" y2="14"/><line x1="8" x2="14" y1="11" y2="11"/>
@@ -270,7 +285,7 @@ export default function CameraPanel({
               <button
                 onClick={onClose}
                 className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all"
-                title="Kapat"
+                title={t('common.close')}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/>
@@ -303,15 +318,15 @@ export default function CameraPanel({
                 <path d="m16 16 2 2M2 11.5V8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3.5"/><path d="M19.4 19.4 4.6 4.6"/>
                 <path d="M22 8s-1.5-2-5-2"/><path d="M2 2l20 20"/>
               </svg>
-              <p className="text-xs text-gray-400 text-center">{cameraError}</p>
-              <button
-                onClick={startCamera}
-                className="mt-1 px-3 py-1 text-xs text-gray-300 border border-gray-600 rounded-md hover:bg-gray-800 transition"
-              >
-                Tekrar dene
-              </button>
-            </div>
-          ) : !cameraReady ? (
+                <p className="text-xs text-gray-400 text-center">{cameraError}</p>
+                <button
+                  onClick={startCamera}
+                  className="mt-1 px-3 py-1 text-xs text-gray-300 border border-gray-600 rounded-md hover:bg-gray-800 transition"
+                >
+                  {t('camera.retry')}
+                </button>
+              </div>
+            ) : !cameraReady ? (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="w-8 h-8 rounded-full border-2 border-gray-600 border-t-gray-300 animate-spin" />
             </div>
@@ -349,19 +364,19 @@ export default function CameraPanel({
           <div className="px-4 py-2.5 border-t border-gray-50">
             <div className="flex items-center gap-3 text-[11px]">
               <div className="flex items-center gap-1">
-                <span className="text-gray-400">İfade:</span>
+                <span className="text-gray-400">{t('camera.expression')}:</span>
                 <span className="font-medium text-gray-700">{lastAnalysis.facialExpression}</span>
               </div>
               <div className="w-px h-3 bg-gray-200" />
               <div className="flex items-center gap-1">
-                <span className="text-gray-400">Göz:</span>
+                <span className="text-gray-400">{t('camera.eye')}:</span>
                 <span className="font-medium text-gray-700">{lastAnalysis.eyeContact}</span>
               </div>
               <div className="w-px h-3 bg-gray-200" />
               <div className="flex items-center gap-1">
-                <span className="text-gray-400">Dikkat:</span>
+                <span className="text-gray-400">{t('camera.attention')}:</span>
                 <span className={`font-medium ${getAttentionColor(lastAnalysis.attentionLevel)}`}>
-                  {lastAnalysis.attentionLevel}
+                  {getAttentionLabel(lastAnalysis.attentionLevel)}
                 </span>
               </div>
             </div>

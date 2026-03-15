@@ -17,6 +17,7 @@
 
 const { GoogleGenAI } = require('@google/genai');
 const { createLogger } = require('../lib/logger');
+const { normalizeLanguage, pickText, isEnglish } = require('../lib/language');
 
 const log = createLogger('VideoAnalysisAgent');
 
@@ -28,7 +29,7 @@ const ai = new GoogleGenAI({ apiKey: GOOGLE_API_KEY });
 /**
  * Video frame analiz prompt'u
  */
-const ANALYSIS_PROMPT = `Sen bir bilişsel tarama asistanının görüntü analiz modülüsün.
+const ANALYSIS_PROMPT_TR = `Sen bir bilişsel tarama asistanının görüntü analiz modülüsün.
 Kullanıcının kamera görüntüsünden aşağıdakileri analiz et:
 
 1. YÜZ İFADESİ: Kullanıcının genel yüz ifadesi (rahat, gergin, endişeli, kararsız, düşünceli, mutlu, şaşkın vb.)
@@ -57,11 +58,41 @@ Eğer yüz görünmüyorsa veya görüntü belirsizse:
   "cameraCommand": "center"
 }`;
 
+const ANALYSIS_PROMPT_EN = `You are a visual analysis module for a cognitive screening assistant.
+Analyze the user's camera frame and provide:
+
+1. FACIAL_EXPRESSION: overall expression (relaxed, stressed, anxious, indecisive, thoughtful, happy, surprised, etc.)
+2. EYE_CONTACT: whether user is looking at the camera or away
+3. ATTENTION_LEVEL: high | medium | low | unknown
+4. OBSERVATIONS: notable behavior cues (head tilt, hand movement, uncertainty)
+
+Respond strictly as JSON:
+{
+  "facialExpression": "expression_type",
+  "eyeContact": "status",
+  "attentionLevel": "high|medium|low|unknown",
+  "confidence": 0.0-1.0,
+  "observations": ["obs1", "obs2"],
+  "summary": "One-sentence summary"
+}
+
+If face is not visible or frame is unclear:
+{
+  "facialExpression": "unknown",
+  "eyeContact": "not detected",
+  "attentionLevel": "unknown",
+  "confidence": 0.0,
+  "observations": ["Face not detected"],
+  "summary": "No face detected in the frame",
+  "cameraCommand": "center"
+}`;
+
 class VideoAnalysisAgent {
-  constructor(sessionId, sendToClient, sendTextToLive) {
+  constructor(sessionId, sendToClient, sendTextToLive, language = 'tr') {
     this.sessionId = sessionId;
     this.sendToClient = sendToClient;
     this.sendTextToLive = sendTextToLive;
+    this.language = normalizeLanguage(language);
     
     // Analiz state
     this.isActive = false;
@@ -75,7 +106,7 @@ class VideoAnalysisAgent {
     this.cameraActive = false;
     this.currentZoom = 1.0;
     
-    log.info('VideoAnalysisAgent oluşturuldu', { sessionId });
+    log.info('VideoAnalysisAgent oluşturuldu', { sessionId, language: this.language });
   }
 
   /**
@@ -93,12 +124,20 @@ class VideoAnalysisAgent {
     this.sendToClient({
       type: 'camera_command',
       command: 'start',
-      message: 'Kameranızı açmanız gerekiyor. Lütfen izin verin.',
+      message: pickText(
+        this.language,
+        'Kameranizi acmaniz gerekiyor. Lutfen izin verin.',
+        'Please enable your camera and grant permission.'
+      ),
     });
     
     return {
       success: true,
-      message: 'Video analizi başlatıldı. Kullanıcının kamerası açılıyor.',
+      message: pickText(
+        this.language,
+        'Video analizi baslatildi. Kullanicinin kamerasi aciliyor.',
+        'Video analysis started. User camera is opening.'
+      ),
     };
   }
 
@@ -163,7 +202,7 @@ class VideoAnalysisAgent {
           {
             role: 'user',
             parts: [
-              { text: ANALYSIS_PROMPT },
+              { text: isEnglish(this.language) ? ANALYSIS_PROMPT_EN : ANALYSIS_PROMPT_TR },
               {
                 inlineData: {
                   mimeType: 'image/jpeg',
@@ -197,12 +236,12 @@ class VideoAnalysisAgent {
           response: responseText.substring(0, 200) 
         });
         analysis = {
-          facialExpression: 'belirsiz',
-          eyeContact: 'tespit edilemedi',
-          attentionLevel: 'belirsiz',
+          facialExpression: pickText(this.language, 'belirsiz', 'unknown'),
+          eyeContact: pickText(this.language, 'tespit edilemedi', 'not detected'),
+          attentionLevel: pickText(this.language, 'belirsiz', 'unknown'),
           confidence: 0,
-          observations: ['Analiz sonucu parse edilemedi'],
-          summary: 'Görüntü analizi tamamlanamadı',
+          observations: [pickText(this.language, 'Analiz sonucu parse edilemedi', 'Analysis response could not be parsed')],
+          summary: pickText(this.language, 'Goruntu analizi tamamlanamadi', 'Image analysis could not be completed'),
         };
       }
 
@@ -237,11 +276,14 @@ class VideoAnalysisAgent {
       }
 
       // Dikkat düşükse Nöra'ya bildir
-      if (analysis.attentionLevel === 'düşük' && analysis.confidence > 0.6) {
+      const normalizedAttention = this._normalizeAttentionLevel(analysis.attentionLevel);
+      if (normalizedAttention === 'low' && analysis.confidence > 0.6) {
         this.sendTextToLive(
-          `VIDEO_ANALYSIS: Kullanıcının dikkati düşük görünüyor. ` +
-          `Gözlem: ${analysis.summary}. ` +
-          `Kullanıcıyı nazikçe teşvik et veya dikkatini toplamak için kısa bir mola öner.`
+          pickText(
+            this.language,
+            `VIDEO_ANALYSIS: Kullanicinin dikkati dusuk gorunuyor. Gozlem: ${analysis.summary}. Kullaniciyi nazikce tesvik et veya dikkatini toplamak icin kisa bir mola oner.`,
+            `VIDEO_ANALYSIS: The user's attention appears low. Observation: ${analysis.summary}. Encourage the user gently or suggest a short refocus break.`
+          )
         );
       }
 
@@ -265,7 +307,14 @@ class VideoAnalysisAgent {
     
     if (!validCommands.includes(command)) {
       log.warn('Geçersiz kamera komutu', { command, sessionId: this.sessionId });
-      return { success: false, message: `Geçersiz kamera komutu: ${command}` };
+      return {
+        success: false,
+        message: pickText(
+          this.language,
+          `Gecersiz kamera komutu: ${command}`,
+          `Invalid camera command: ${command}`
+        ),
+      };
     }
 
     // Zoom seviyesini güncelle
@@ -294,7 +343,11 @@ class VideoAnalysisAgent {
       success: true, 
       command, 
       currentZoom: this.currentZoom,
-      message: `Kamera komutu uygulandı: ${command}` 
+      message: pickText(
+        this.language,
+        `Kamera komutu uygulandi: ${command}`,
+        `Camera command applied: ${command}`
+      ),
     };
   }
 
@@ -304,8 +357,8 @@ class VideoAnalysisAgent {
   _generateSummary() {
     if (this.analysisResults.length === 0) {
       return {
-        overallAttention: 'veri yok',
-        dominantExpression: 'veri yok',
+        overallAttention: pickText(this.language, 'veri yok', 'no data'),
+        dominantExpression: pickText(this.language, 'veri yok', 'no data'),
         eyeContactRate: 0,
         observations: [],
         riskIndicators: [],
@@ -313,22 +366,23 @@ class VideoAnalysisAgent {
     }
 
     // Dikkat seviyeleri
-    const attentionCounts = { yüksek: 0, orta: 0, düşük: 0, belirsiz: 0 };
+    const attentionCounts = { high: 0, medium: 0, low: 0, unknown: 0 };
     const expressions = {};
     let eyeContactPositive = 0;
     const allObservations = [];
 
     for (const r of this.analysisResults) {
       // Dikkat
-      const attn = r.attentionLevel || 'belirsiz';
+      const attn = this._normalizeAttentionLevel(r.attentionLevel);
       attentionCounts[attn] = (attentionCounts[attn] || 0) + 1;
 
       // Yüz ifadesi
-      const expr = r.facialExpression || 'belirsiz';
+      const expr = (r.facialExpression || pickText(this.language, 'belirsiz', 'unknown')).toLowerCase();
       expressions[expr] = (expressions[expr] || 0) + 1;
 
       // Göz teması
-      if (r.eyeContact && r.eyeContact.includes('bakıyor')) {
+      const eyeText = (r.eyeContact || '').toLowerCase();
+      if (eyeText.includes('bakıyor') || eyeText.includes('bakiyor') || eyeText.includes('looking') || eyeText.includes('camera')) {
         eyeContactPositive++;
       }
 
@@ -353,17 +407,25 @@ class VideoAnalysisAgent {
 
     // Risk göstergeleri
     const riskIndicators = [];
-    if (attentionCounts.düşük / total > 0.4) {
-      riskIndicators.push('Sık dikkat dağılması gözlemlendi');
+    if (attentionCounts.low / total > 0.4) {
+      riskIndicators.push(
+        pickText(this.language, 'Sik dikkat dagilmasi gozlemlendi', 'Frequent attention drop observed')
+      );
     }
     if (eyeContactRate < 30) {
-      riskIndicators.push('Düşük göz teması oranı');
+      riskIndicators.push(
+        pickText(this.language, 'Dusuk goz temasi orani', 'Low eye contact rate')
+      );
     }
     if (expressions['kararsız'] && expressions['kararsız'] / total > 0.3) {
-      riskIndicators.push('Sık kararsızlık ifadesi');
+      riskIndicators.push(
+        pickText(this.language, 'Sik kararsizlik ifadesi', 'Frequent indecisive expression')
+      );
     }
-    if (expressions['endişeli'] && expressions['endişeli'] / total > 0.3) {
-      riskIndicators.push('Endişeli görünüm');
+    if ((expressions['endişeli'] && expressions['endişeli'] / total > 0.3) || (expressions.anxious && expressions.anxious / total > 0.3)) {
+      riskIndicators.push(
+        pickText(this.language, 'Endiseli gorunum', 'Anxious appearance')
+      );
     }
 
     return {
@@ -376,6 +438,14 @@ class VideoAnalysisAgent {
       observations: [...new Set(allObservations)].slice(0, 10),
       riskIndicators,
     };
+  }
+
+  _normalizeAttentionLevel(value) {
+    const text = String(value || '').toLowerCase();
+    if (text.includes('yüksek') || text.includes('yuksek') || text === 'high') return 'high';
+    if (text.includes('orta') || text === 'medium') return 'medium';
+    if (text.includes('düşük') || text.includes('dusuk') || text === 'low') return 'low';
+    return 'unknown';
   }
 
   /**

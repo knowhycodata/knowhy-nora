@@ -13,6 +13,7 @@
 
 const { GoogleGenAI } = require('@google/genai');
 const { createLogger } = require('../lib/logger');
+const { normalizeLanguage, isEnglish } = require('../lib/language');
 
 const log = createLogger('StoryGenerator');
 
@@ -25,7 +26,7 @@ const ai = new GoogleGenAI({ apiKey: GOOGLE_API_KEY });
  * Hikaye üretim prompt'u — bilişsel tarama için optimize edilmiş
  * Kısa, somut, günlük yaşam sahneleri, 5-7 cümle, isim/yer/eylem detayları
  */
-const STORY_GENERATION_PROMPT = `Sen bir bilişsel tarama sistemi için hikaye üreten bir asistansın.
+const STORY_GENERATION_PROMPT_TR = `Sen bir bilişsel tarama sistemi için hikaye üreten bir asistansın.
 
 GÖREV: Alzheimer / bilişsel tarama testi için kullanılacak KISA bir hikaye üret.
 
@@ -47,11 +48,30 @@ KURALLAR:
 
 Şimdi tamamen yeni ve benzersiz bir hikaye üret:`;
 
+const STORY_GENERATION_PROMPT_EN = `You are a story writer for a cognitive screening system.
+
+TASK: Generate a SHORT story suitable for Alzheimer/cognitive screening recall tests.
+
+RULES:
+- The story must be in English.
+- Keep it 5-7 sentences (not too short or too long).
+- Describe a concrete everyday scene (grocery, park, school, hospital, home, etc.).
+- Use at least 2 different person names.
+- Mention at least 1 place.
+- Include at least 3 concrete objects or actions.
+- Keep a clear timeline (morning to afternoon to evening, etc.).
+- Use simple and clear sentences.
+- Keep a warm and positive tone.
+- Return only the story text. Do not add commentary.
+- Do not wrap in quotes.
+
+Now write a brand-new unique story:`;
+
 /**
  * Geniş statik hikaye havuzu — API fallback
  * 30 benzersiz hikaye, farklı temalar ve karakterler
  */
-const FALLBACK_STORIES = [
+const FALLBACK_STORIES_TR = [
   "Mehmet sabah erkenden uyandı ve bahçeye çıktı. Bahçedeki çiçekleri suladı ve domates topladı. Sonra mutfağa gidip kahvaltı hazırladı. Komşusu Ali geldi, birlikte çay içtiler. Öğleden sonra Mehmet pazara gitti ve taze balık aldı. Akşam balığı pişirip ailesiyle yedi.",
   "Zeynep otobüsle hastaneye gitti. Hastanede hemşire arkadaşı Fatma ile karşılaştı. Birlikte kantinde çorba içtiler. Sonra Zeynep doktorla görüştü ve ilaçlarını aldı. Eczaneden çıkınca yağmur başladı. Bir taksi çevirip eve döndü ve sıcak bir süt içti.",
   "Küçük Emre okuldan eve geldi ve çantasını bıraktı. Annesi ona sıcak bir çorba hazırlamıştı. Çorbayı içtikten sonra kedisiyle oynadı. Sonra ödevlerini yaptı ve resim çizdi. Akşam babası marketten dondurma getirdi. Hep birlikte televizyon izleyip uyudular.",
@@ -84,8 +104,24 @@ const FALLBACK_STORIES = [
   "Selim ve arkadaşı Kaan sabah erken buluştular ve dağa tırmanışa çıktılar. Yolda kestane topladılar ve manzaranın fotoğrafını çektiler. Zirveye öğleye doğru ulaştılar ve termoslarından çay içtiler. İnerken yağmura yakalandılar ve bir çobanın kulübesinde sığındılar. Çoban Dursun onlara peynir ekmek ikram etti. Akşam şehre döndüler ve sıcak bir çorba içtiler.",
 ];
 
+const FALLBACK_STORIES_EN = [
+  "Emma woke up early and walked to the neighborhood bakery. She met her friend Daniel on the way and they bought warm bread together. After breakfast, Emma went to the park and read a short novel on a bench. In the afternoon, Daniel called and invited her to the grocery store to buy fruit and milk. They returned home before sunset and prepared a simple pasta dinner.",
+  "Michael took the bus to the hospital in the morning for a routine check. At the entrance he met nurse Sarah, and they talked for a few minutes. After his appointment, he stopped by the pharmacy to pick up his medicine. Around noon he had soup and tea at a small cafe near the square. In the evening he went home, watered his plants, and called his daughter.",
+  "Lena and her brother Noah visited the city market on Saturday morning. They bought tomatoes, oranges, and a small bouquet of flowers for their mother. At noon they returned home and cooked vegetable soup in the kitchen. Later they cleaned the living room and organized old photo albums. In the evening the family sat together, drank tea, and watched a comedy show.",
+  "James left home early and cycled along the seaside road. He stopped at a kiosk and bought a bottle of water and a sandwich. Around midday he met his coworker Olivia at the library to return two books. In the afternoon they walked to the station and discussed next week's plans. After sunset James went home, took a shower, and listened to music.",
+  "Sophie started her day by feeding the cat and opening the windows. She then met her neighbor Mark in the garden and helped him carry flower pots. Around noon they visited a nearby cafe and shared a slice of cake. In the afternoon Sophie bought a notebook and pens from a stationery shop. In the evening she wrote in her journal and called her grandmother.",
+  "Ryan and his wife Chloe drove to a small town for a family visit. On the way they stopped for coffee and fresh bagels. At noon they arrived at Chloe's aunt's house and helped set the table for lunch. In the afternoon the children played in the backyard with a red ball and a kite. Before returning, everyone took a group photo in front of the house.",
+  "Ava arrived at school before the first bell and prepared the classroom. She wrote today's schedule on the board and placed books on each desk. During the break she spoke with teacher Liam near the playground. After lunch she helped students paint trees and birds in art class. In the evening Ava went home, made herbal tea, and reviewed tomorrow's lesson plan.",
+  "Daniel spent the morning at his workshop repairing old chairs. His friend Ethan brought him a toolbox and a new brush. Around noon they ate sandwiches and apples under a large tree. In the afternoon Daniel delivered one repaired chair to Mrs. Grace across the street. At night he returned home, made soup, and read the newspaper.",
+  "Mia took her daughter Ella to the museum on Sunday morning. They looked at paintings and a model ship in the history hall. At noon they bought orange juice and cookies from the museum cafe. In the afternoon they walked through the city center and picked up bread from a bakery. In the evening Ella drew pictures of what she saw and showed them to her father.",
+  "Lucas woke up early to catch a train to the capital. He sat by the window and wrote a short to-do list in his notebook. After arriving, he met his colleague Nora near the station and they went to a meeting room. Around noon they ordered rice, salad, and lemonade for lunch. In the evening Lucas took the train back and relaxed at home with a cup of tea.",
+];
+
 // Kullanılan hikayelerin takibi (tekrarı önlemek)
-const usedStoryIndices = new Set();
+const usedStoryIndicesByLanguage = {
+  tr: new Set(),
+  en: new Set(),
+};
 
 /**
  * Gemini 3.1 Flash Lite ile anlık hikaye üretir.
@@ -93,14 +129,18 @@ const usedStoryIndices = new Set();
  * 
  * @returns {Promise<{story: string, source: 'ai'|'fallback', model?: string}>}
  */
-async function generateStory() {
-  log.info('Hikaye üretimi başlıyor', { model: STORY_MODEL });
+async function generateStory(language = 'tr') {
+  const normalizedLanguage = normalizeLanguage(language);
+  const isEn = isEnglish(normalizedLanguage);
+  const prompt = isEn ? STORY_GENERATION_PROMPT_EN : STORY_GENERATION_PROMPT_TR;
+
+  log.info('Hikaye üretimi başlıyor', { model: STORY_MODEL, language: normalizedLanguage });
 
   // Önce AI ile dene
   try {
     const response = await ai.models.generateContent({
       model: STORY_MODEL,
-      contents: STORY_GENERATION_PROMPT,
+      contents: prompt,
       config: {
         temperature: 1.0,
         topP: 0.95,
@@ -125,6 +165,7 @@ async function generateStory() {
         story: cleanStory,
         source: 'ai',
         model: STORY_MODEL,
+        language: normalizedLanguage,
       };
     }
 
@@ -139,41 +180,53 @@ async function generateStory() {
   }
 
   // Fallback: Statik havuzdan seç
-  return selectFallbackStory();
+  return selectFallbackStory(normalizedLanguage);
 }
 
 /**
  * Statik havuzdan tekrar etmeyen rastgele hikaye seçer
  */
-function selectFallbackStory() {
+function selectFallbackStory(language = 'tr') {
+  const normalizedLanguage = normalizeLanguage(language);
+  const pool = isEnglish(normalizedLanguage) ? FALLBACK_STORIES_EN : FALLBACK_STORIES_TR;
+  const usedStoryIndices = usedStoryIndicesByLanguage[normalizedLanguage] || usedStoryIndicesByLanguage.tr;
+
   // Tüm hikayeler kullanıldıysa sıfırla
-  if (usedStoryIndices.size >= FALLBACK_STORIES.length) {
+  if (usedStoryIndices.size >= pool.length) {
     log.info('Tüm fallback hikayeler kullanıldı, sıfırlanıyor');
     usedStoryIndices.clear();
   }
 
   // Kullanılmamış indeksleri bul
   const available = [];
-  for (let i = 0; i < FALLBACK_STORIES.length; i++) {
+  for (let i = 0; i < pool.length; i++) {
     if (!usedStoryIndices.has(i)) available.push(i);
   }
 
   const randomIdx = available[Math.floor(Math.random() * available.length)];
   usedStoryIndices.add(randomIdx);
 
-  const story = FALLBACK_STORIES[randomIdx];
+  const story = pool[randomIdx];
 
   log.info('Fallback hikaye seçildi', {
     index: randomIdx,
+    language: normalizedLanguage,
     usedCount: usedStoryIndices.size,
-    totalPool: FALLBACK_STORIES.length,
+    totalPool: pool.length,
     preview: story.substring(0, 80),
   });
 
   return {
     story,
     source: 'fallback',
+    language: normalizedLanguage,
   };
 }
 
-module.exports = { generateStory, FALLBACK_STORIES };
+module.exports = {
+  generateStory,
+  FALLBACK_STORIES: {
+    tr: FALLBACK_STORIES_TR,
+    en: FALLBACK_STORIES_EN,
+  },
+};

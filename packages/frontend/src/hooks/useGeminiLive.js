@@ -32,6 +32,16 @@ log.info('WebSocket URL', {
   apiBase: import.meta.env.VITE_API_URL || '/api',
 });
 
+function normalizeLanguage(input) {
+  if (typeof input !== 'string') return 'tr';
+  const normalized = input.trim().toLowerCase();
+  return normalized === 'en' ? 'en' : 'tr';
+}
+
+function pickText(language, trText, enText) {
+  return normalizeLanguage(language) === 'en' ? enText : trText;
+}
+
 export const SESSION_STATES = {
   IDLE: 'idle',
   CONNECTING: 'connecting',
@@ -83,6 +93,7 @@ export function useGeminiLive() {
   const playerDataArrayRef = useRef(null);
   const audioMeterFrameRef = useRef(null);
   const completionLockedRef = useRef(false);
+  const sessionLanguageRef = useRef('tr');
 
   // State ref'ini güncel tut
   useEffect(() => {
@@ -172,7 +183,13 @@ export function useGeminiLive() {
       });
     } catch (err) {
       log.error('Mikrofon hatası', { error: err.message });
-      setError('Mikrofon izni alınamadı: ' + err.message);
+      setError(
+        pickText(
+          sessionLanguageRef.current,
+          'Mikrofon izni alinamadi: ' + err.message,
+          'Microphone permission could not be granted: ' + err.message
+        )
+      );
     }
   }, []);
 
@@ -308,13 +325,22 @@ export function useGeminiLive() {
         break;
 
       case 'auth_error':
-        setError('Kimlik doğrulama hatası');
+        setError(
+          pickText(
+            sessionLanguageRef.current,
+            'Kimlik dogrulama hatasi',
+            'Authentication error'
+          )
+        );
         setState(SESSION_STATES.ERROR);
         break;
 
       case 'session_started':
         log.info('Session başladı', { sessionId: message.sessionId });
         setSessionId(message.sessionId);
+        if (message.language) {
+          sessionLanguageRef.current = normalizeLanguage(message.language);
+        }
         setState(SESSION_STATES.ACTIVE);
         break;
 
@@ -604,9 +630,10 @@ export function useGeminiLive() {
   };
 
   // ─── Connect + Start (tek akış) ────────────────────────────────
-  const connectAndStart = useCallback(async (token) => {
+  const connectAndStart = useCallback(async (token, options = {}) => {
     log.info('connectAndStart called', { hasToken: !!token, wsExists: !!wsRef.current });
     completionLockedRef.current = false;
+    sessionLanguageRef.current = normalizeLanguage(options.language);
     
     if (wsRef.current) {
       log.warn('Already connected, skipping');
@@ -615,7 +642,13 @@ export function useGeminiLive() {
 
     if (!token) {
       log.error('No token provided!');
-      setError('Token gerekli');
+      setError(
+        pickText(
+          sessionLanguageRef.current,
+          'Token gerekli',
+          'Token is required'
+        )
+      );
       setState(SESSION_STATES.ERROR);
       return;
     }
@@ -680,12 +713,15 @@ export function useGeminiLive() {
   useEffect(() => {
     log.info('State effect triggered', { state, wsReady: wsRef.current?.readyState });
     
-    if (state === SESSION_STATES.READY) {
+      if (state === SESSION_STATES.READY) {
       if (completionLockedRef.current) return;
       const ws = wsRef.current;
       if (ws && ws.readyState === WebSocket.OPEN) {
         log.info('READY state: sending start_session');
-        ws.send(JSON.stringify({ type: 'start_session' }));
+        ws.send(JSON.stringify({
+          type: 'start_session',
+          language: sessionLanguageRef.current,
+        }));
         setState(SESSION_STATES.ACTIVE);
       } else {
         log.warn('READY state but WebSocket not open', { readyState: ws?.readyState });

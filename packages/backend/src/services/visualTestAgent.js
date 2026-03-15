@@ -1,111 +1,145 @@
 /**
  * Visual Test Agent - Test 3 Koordinatör Ajanı
- * 
- * ADK SequentialAgent kalıbı ile çalışır:
- *   Step 1: ImageGeneratorAgent → Imagen 4 ile görsel üretir, frontend'e gönderir
- *   Step 2: ConversationAgent (Gemini Live / Nöra) → Kullanıcıya sorar, cevabı alır
- *   Step 3: Tekrar Step 1'e döner (3 görsel tamamlanana kadar)
- *   Step 4: submit_visual_recognition ile skorlama
- * 
- * KRİTİK: Görsel verisi (base64) ASLA Gemini Live API'ye gönderilmez.
- *          Sadece frontend'e WebSocket üzerinden gider.
- *          Gemini'ye sadece hafif text metadata gider.
- * 
- * Sorun: Gemini Live API tool response boyut sınırı var (~100KB).
- *        274KB base64 görsel → "Request contains an invalid argument" → session crash.
- * Çözüm: Görsel pipeline'ı Gemini tool calling'den ayırıp ayrı ajan yönetiyor.
  */
 
 const { createLogger } = require('../lib/logger');
+const { normalizeLanguage, pickText, isEnglish } = require('../lib/language');
 const { getImagePipeline } = require('./imageGenerator');
 const { getStaticTestImage } = require('./staticTestImages');
 const { selectRandomKeywords } = require('./visualTestKeywords');
 
 const log = createLogger('VisualTestAgent');
 
-/**
- * Visual Test Agent States
- * IDLE → GENERATING → WAITING_ANSWER → GENERATING → WAITING_ANSWER → ... → COLLECTING → DONE
- */
 const VT_STATE = {
   IDLE: 'IDLE',
-  GENERATING: 'GENERATING',           // Görsel üretiliyor
-  WAITING_ANSWER: 'WAITING_ANSWER',   // Kullanıcı cevabı bekleniyor
-  COLLECTING: 'COLLECTING',           // Tüm cevaplar toplandı, submit bekliyor
-  DONE: 'DONE',                       // Test tamamlandı
+  GENERATING: 'GENERATING',
+  WAITING_ANSWER: 'WAITING_ANSWER',
+  COLLECTING: 'COLLECTING',
+  DONE: 'DONE',
 };
 
-class VisualTestAgent {
-  constructor(sessionId, sendToClient, sendTextToLive) {
-    this.sessionId = sessionId;
-    this.sendToClient = sendToClient;       // Frontend'e WebSocket mesajı
-    this.sendTextToLive = sendTextToLive;   // Gemini Live'a text mesaj
+const TR_TO_EN_SUBJECT = {
+  saat: 'clock',
+  anahtar: 'key',
+  kalem: 'pen',
+  masa: 'table',
+  sandalye: 'chair',
+  bardak: 'glass',
+  kitap: 'book',
+  lamba: 'lamp',
+  telefon: 'phone',
+  çanta: 'bag',
+  ayna: 'mirror',
+  tabak: 'plate',
+  çatal: 'fork',
+  makas: 'scissors',
+  şemsiye: 'umbrella',
+  kedi: 'cat',
+  köpek: 'dog',
+  kuş: 'bird',
+  balık: 'fish',
+  kelebek: 'butterfly',
+  at: 'horse',
+  tavşan: 'rabbit',
+  araba: 'car',
+  bisiklet: 'bicycle',
+  gemi: 'ship',
+  uçak: 'airplane',
+  tren: 'train',
+  elma: 'apple',
+  ekmek: 'bread',
+  muz: 'banana',
+  portakal: 'orange',
+  çilek: 'strawberry',
+  ağaç: 'tree',
+  çiçek: 'flower',
+  güneş: 'sun',
+  yıldız: 'star',
+  bulut: 'cloud',
+  dağ: 'mountain',
+  şapka: 'hat',
+  gözlük: 'glasses',
+  ayakkabı: 'shoe',
+  eldiven: 'glove',
+};
 
-    // Her session için rastgele 3 kelime seç
-    this.testImages = selectRandomKeywords(3);
+function mapSubjectToEnglish(subject) {
+  return TR_TO_EN_SUBJECT[subject] || subject;
+}
+
+class VisualTestAgent {
+  constructor(sessionId, sendToClient, sendTextToLive, language = 'tr') {
+    this.sessionId = sessionId;
+    this.sendToClient = sendToClient;
+    this.sendTextToLive = sendTextToLive;
+    this.language = normalizeLanguage(language);
+
+    this.testImages = selectRandomKeywords(3).map((item) => {
+      const localized = isEnglish(this.language)
+        ? mapSubjectToEnglish(item.subject)
+        : item.subject;
+      return {
+        ...item,
+        localizedSubject: localized,
+        localizedCorrectAnswer: localized,
+      };
+    });
     log.info('Session için rastgele görseller seçildi', {
       sessionId,
-      keywords: this.testImages.map(k => k.subject),
+      language: this.language,
+      keywords: this.testImages.map((k) => k.localizedSubject),
     });
 
-    // State
     this.state = VT_STATE.IDLE;
     this.currentImageIndex = -1;
-    this.answers = [];                      // { imageIndex, userAnswer, correctAnswer }
+    this.answers = [];
     this.isActive = false;
 
-    // Transkript buffer - kullanıcı cevabını toplamak için
     this.userAnswerBuffer = '';
     this.answerBufferTimeout = null;
-    this.ANSWER_SETTLE_MS = 3000;  // 3 sn sessizlik → cevap tamamlandı
-
-    log.info('VisualTestAgent oluşturuldu', { sessionId });
+    this.ANSWER_SETTLE_MS = 3000;
   }
 
-  /**
-   * Test 3'ü başlatır — Gemini'nin start_visual_test tool call'ı tetikler
-   * Gemini'ye hafif bir response döner, asıl iş burada yapılır
-   */
   async startTest() {
     if (this.isActive) {
-      log.warn('Test zaten aktif', { sessionId: this.sessionId });
-      return { success: false, message: 'Görsel tanıma testi zaten devam ediyor.' };
+      return {
+        success: false,
+        message: pickText(
+          this.language,
+          'Gorsel tanima testi zaten devam ediyor.',
+          'Visual recognition test is already in progress.'
+        ),
+      };
     }
 
-    log.info('🎨 Visual Test başlatılıyor', { sessionId: this.sessionId });
     this.isActive = true;
     this.state = VT_STATE.IDLE;
     this.currentImageIndex = -1;
     this.answers = [];
 
-    // Frontend'e test başladı bildirimi
     this.sendToClient({
       type: 'visual_test_started',
       totalImages: this.testImages.length,
     });
 
-    // İlk görseli üret ve göster
     await this._generateAndShowNextImage();
 
-    // Gemini'ye hafif response dön (GÖRSEL VERİSİ YOK!)
     return {
       success: true,
-      message: `Görsel tanıma testi başlatıldı. Bu oturumda gösterilecek görseller: ${this.testImages.map(k => k.subject).join(', ')}. İlk görsel ekranda gösteriliyor. Kullanıcıya "Ne görüyorsunuz?" diye sor ve cevabını bekle. Cevabı aldıktan sonra sana bir sonraki görseli hazırlayacağım.`,
+      message: pickText(
+        this.language,
+        `Gorsel tanima testi baslatildi. Bu oturumdaki gorseller: ${this.testImages.map((k) => k.localizedSubject).join(', ')}. Ilk gorsel ekranda. Kullanicidan "Ne goruyorsunuz?" diye cevap al.`,
+        `Visual recognition test started. Subjects in this session: ${this.testImages.map((k) => k.localizedSubject).join(', ')}. The first image is on screen. Ask the user: "What do you see?"`
+      ),
       totalImages: this.testImages.length,
       currentImage: 1,
-      selectedSubjects: this.testImages.map(k => k.subject),
+      selectedSubjects: this.testImages.map((k) => k.localizedSubject),
     };
   }
 
-  /**
-   * Sub-Agent: ImageGenerator — Sıradaki görseli üretir ve frontend'e gönderir
-   * Gemini'ye asla görsel verisi gitmez
-   */
   async _generateAndShowNextImage() {
-    this.currentImageIndex++;
-
+    this.currentImageIndex += 1;
     if (this.currentImageIndex >= this.testImages.length) {
-      log.info('Tüm görseller gösterildi', { sessionId: this.sessionId });
       this.state = VT_STATE.COLLECTING;
       return;
     }
@@ -113,13 +147,6 @@ class VisualTestAgent {
     const imageConfig = this.testImages[this.currentImageIndex];
     this.state = VT_STATE.GENERATING;
 
-    log.info('Görsel üretimi başlıyor', {
-      sessionId: this.sessionId,
-      imageIndex: this.currentImageIndex,
-      subject: imageConfig.subject,
-    });
-
-    // Frontend'e "üretiliyor" bildirimi
     this.sendToClient({
       type: 'visual_test_generating',
       imageIndex: this.currentImageIndex,
@@ -128,17 +155,12 @@ class VisualTestAgent {
 
     try {
       const pipeline = getImagePipeline();
-      const prompt = `Basit, net ve tanınabilir bir ${imageConfig.subject} görseli. Minimalist, temiz arka plan.`;
+      const prompt = isEnglish(this.language)
+        ? `A simple, clear and recognizable image of ${imageConfig.localizedSubject}. Minimalist composition, clean background.`
+        : `Basit, net ve taninabilir bir ${imageConfig.localizedSubject} gorseli. Minimalist, temiz arka plan.`;
       const result = await pipeline.run(prompt, { aspectRatio: '1:1' });
 
       if (result.success && result.image) {
-        log.info('Görsel üretildi (AI)', {
-          sessionId: this.sessionId,
-          imageIndex: this.currentImageIndex,
-          dataLength: result.image.data?.length || 0,
-        });
-
-        // Frontend'e görseli gönder (Gemini'ye DEĞİL!)
         this.sendToClient({
           type: 'visual_test_image',
           imageIndex: this.currentImageIndex,
@@ -148,7 +170,6 @@ class VisualTestAgent {
           totalImages: this.testImages.length,
         });
       } else {
-        // Fallback: Statik görsel
         this._sendFallbackImage(this.currentImageIndex, imageConfig.subject);
       }
     } catch (error) {
@@ -160,20 +181,10 @@ class VisualTestAgent {
       this._sendFallbackImage(this.currentImageIndex, imageConfig.subject);
     }
 
-    // State: Kullanıcı cevabını bekle
     this.state = VT_STATE.WAITING_ANSWER;
     this.userAnswerBuffer = '';
-
-    log.info('Görsel gösterildi, cevap bekleniyor', {
-      sessionId: this.sessionId,
-      imageIndex: this.currentImageIndex,
-      state: this.state,
-    });
   }
 
-  /**
-   * Fallback: Statik SVG görsel gönder
-   */
   _sendFallbackImage(imageIndex, subject) {
     const staticImage = getStaticTestImage(subject);
     if (staticImage) {
@@ -185,56 +196,32 @@ class VisualTestAgent {
         generatedByAI: false,
         totalImages: this.testImages.length,
       });
-    } else {
-      // Hiç görsel yoksa bile frontend'e bildir
-      this.sendToClient({
-        type: 'visual_test_image',
-        imageIndex,
-        imageBase64: null,
-        mimeType: null,
-        generatedByAI: false,
-        fallback: true,
-        totalImages: this.testImages.length,
-      });
+      return;
     }
+
+    this.sendToClient({
+      type: 'visual_test_image',
+      imageIndex,
+      imageBase64: null,
+      mimeType: null,
+      generatedByAI: false,
+      fallback: true,
+      totalImages: this.testImages.length,
+    });
   }
 
-  /**
-   * Kullanıcı transkriptini analiz et — cevap toplama
-   * Brain Agent'tan çağrılır
-   */
   onUserTranscript(text) {
     if (!this.isActive || this.state !== VT_STATE.WAITING_ANSWER) return;
-
-    const cleanText = text.trim();
+    const cleanText = (text || '').trim();
     if (!cleanText) return;
 
-    this.userAnswerBuffer += ' ' + cleanText;
-
-    log.debug('Kullanıcı cevap veriyor', {
-      sessionId: this.sessionId,
-      imageIndex: this.currentImageIndex,
-      buffer: this.userAnswerBuffer.trim().substring(0, 100),
-    });
-
-    // Debounce: Kullanıcı konuşmayı bitirince cevabı kaydet
+    this.userAnswerBuffer += ` ${cleanText}`;
     if (this.answerBufferTimeout) clearTimeout(this.answerBufferTimeout);
-    this.answerBufferTimeout = setTimeout(() => {
-      this._finalizeCurrentAnswer();
-    }, this.ANSWER_SETTLE_MS);
+    this.answerBufferTimeout = setTimeout(() => this._finalizeCurrentAnswer(), this.ANSWER_SETTLE_MS);
   }
 
-  /**
-   * Agent transkriptini analiz et — Nöra "ne görüyorsunuz" dedi mi?
-   * Bu bilgiyi sadece loglama/debug için kullanıyoruz
-   */
   onAgentTranscript(text) {
-    // Agent transkriptlerini loglama amaçlı takip et
     if (!this.isActive) return;
-
-    const lowerText = text.toLowerCase();
-    // Nöra cevabı aldıktan sonra "ikinci/üçüncü görsel" vs. diyorsa
-    // ama biz zaten kendi akışımızı yönetiyoruz
     log.debug('Agent transcript (visual test)', {
       sessionId: this.sessionId,
       state: this.state,
@@ -242,37 +229,18 @@ class VisualTestAgent {
     });
   }
 
-  /**
-   * Mevcut görselin cevabını kaydet ve sonraki görsele geç
-   */
   async _finalizeCurrentAnswer() {
     if (this.state !== VT_STATE.WAITING_ANSWER) return;
 
     const answer = this.userAnswerBuffer.trim();
     const imageConfig = this.testImages[this.currentImageIndex];
-
-    if (!answer) {
-      log.warn('Boş cevap', { sessionId: this.sessionId, imageIndex: this.currentImageIndex });
-      // Boş cevap da kaydedelim
-    }
-
     this.answers.push({
       imageIndex: this.currentImageIndex,
       imageId: `image_${this.currentImageIndex}`,
       userAnswer: answer,
-      correctAnswer: imageConfig.correctAnswer,
+      correctAnswer: imageConfig.localizedCorrectAnswer,
     });
 
-    log.info('Cevap kaydedildi', {
-      sessionId: this.sessionId,
-      imageIndex: this.currentImageIndex,
-      userAnswer: answer.substring(0, 100),
-      correctAnswer: imageConfig.correctAnswer,
-      answeredCount: this.answers.length,
-      totalImages: this.testImages.length,
-    });
-
-    // Frontend'e cevap kaydedildi bildirimi
     this.sendToClient({
       type: 'visual_test_answer_recorded',
       imageIndex: this.currentImageIndex,
@@ -280,94 +248,74 @@ class VisualTestAgent {
       totalImages: this.testImages.length,
     });
 
-    // Sırada görsel var mı?
     if (this.currentImageIndex + 1 < this.testImages.length) {
-      // Sonraki görsele geç
-      log.info('Sonraki görsele geçiliyor', {
-        sessionId: this.sessionId,
-        nextIndex: this.currentImageIndex + 1,
-      });
-
-      // Gemini'ye bildir — hafif text, görsel yok
       this.sendTextToLive(
-        `VISUAL_TEST_NEXT: Kullanıcı görsel ${this.currentImageIndex + 1}'e "${answer}" cevabını verdi. ` +
-        `Şimdi görsel ${this.currentImageIndex + 2}/${this.testImages.length} ekranda gösteriliyor. ` +
-        `Kullanıcıya "Şimdi ekrandaki yeni görsele bakın. Ne görüyorsunuz?" diye sor ve cevabını bekle.`
+        pickText(
+          this.language,
+          `VISUAL_TEST_NEXT: Kullanici gorsel ${this.currentImageIndex + 1} icin "${answer}" cevabini verdi. Simdi gorsel ${this.currentImageIndex + 2}/${this.testImages.length} ekranda. Kullanicidan yeni gorseli tarif etmesini iste.`,
+          `VISUAL_TEST_NEXT: The user answered "${answer}" for image ${this.currentImageIndex + 1}. Image ${this.currentImageIndex + 2}/${this.testImages.length} is now on screen. Ask the user to describe the new image.`
+        )
       );
-
-      // Sonraki görseli üret ve göster
       await this._generateAndShowNextImage();
-    } else {
-      // Tüm görseller tamamlandı → submit
-      log.info('Tüm görseller cevaplandı, submit yapılıyor', {
-        sessionId: this.sessionId,
-        answers: this.answers,
-      });
-
-      this.state = VT_STATE.COLLECTING;
-
-      // Gemini'ye submit talimatı gönder — cevap verileri ile birlikte
-      const answersForSubmit = this.answers.map(a => ({
-        imageIndex: a.imageIndex,
-        userAnswer: a.userAnswer,
-        correctAnswer: a.correctAnswer,
-      }));
-
-      this.sendTextToLive(
-        `VISUAL_TEST_COMPLETE: Tüm ${this.testImages.length} görsel cevaplandı. ` +
-        `Cevaplar: ${JSON.stringify(answersForSubmit)}. ` +
-        `Şimdi submit_visual_recognition fonksiyonunu çağır: ` +
-        `sessionId: "${this.sessionId}", ` +
-        `answers: ${JSON.stringify(answersForSubmit)}. ` +
-        `Submit ettikten sonra kullanıcıya "Görsel tanıma testini tamamladınız! Son testimize geçmeye hazır mısınız?" de.`
-      );
-
-      this.state = VT_STATE.DONE;
-      this.isActive = false;
-
-      // Frontend'e test bitti bildirimi
-      this.sendToClient({
-        type: 'visual_test_completed',
-        answeredCount: this.answers.length,
-        totalImages: this.testImages.length,
-      });
+      return;
     }
+
+    this.state = VT_STATE.COLLECTING;
+    const answersForSubmit = this.answers.map((a) => ({
+      imageIndex: a.imageIndex,
+      userAnswer: a.userAnswer,
+      correctAnswer: a.correctAnswer,
+    }));
+
+    this.sendTextToLive(
+      pickText(
+        this.language,
+        `VISUAL_TEST_COMPLETE: Tum ${this.testImages.length} gorsel tamamlandi. Cevaplar: ${JSON.stringify(answersForSubmit)}. ` +
+          `Simdi submit_visual_recognition fonksiyonunu cagir. sessionId: "${this.sessionId}", answers: ${JSON.stringify(answersForSubmit)}. ` +
+          'Sonra kullaniciya son teste gecmeye hazir olup olmadigini sor.',
+        `VISUAL_TEST_COMPLETE: All ${this.testImages.length} images are answered. Answers: ${JSON.stringify(answersForSubmit)}. ` +
+          `Now call submit_visual_recognition with sessionId: "${this.sessionId}", answers: ${JSON.stringify(answersForSubmit)}. ` +
+          'Then ask if the user is ready for the final test.'
+      )
+    );
+
+    this.state = VT_STATE.DONE;
+    this.isActive = false;
+    this.sendToClient({
+      type: 'visual_test_completed',
+      answeredCount: this.answers.length,
+      totalImages: this.testImages.length,
+    });
   }
 
-  /**
-   * record_visual_answer tool call'ı ile cevap kaydetme
-   * Nöra kullanıcıdan cevabı aldığında bu tool'u çağırır
-   * VisualTestAgent cevabı kaydeder ve sonraki görsele geçer
-   */
   async recordAnswer(imageIndex, userAnswer) {
     if (!this.isActive) {
-      log.warn('recordAnswer: Test aktif değil', { sessionId: this.sessionId });
-      return { success: false, message: 'Görsel tanıma testi aktif değil.' };
+      return {
+        success: false,
+        message: pickText(
+          this.language,
+          'Gorsel tanima testi aktif degil.',
+          'Visual recognition test is not active.'
+        ),
+      };
     }
 
-    // Debounce timeout'u iptal et (artık cevap geldi)
     if (this.answerBufferTimeout) clearTimeout(this.answerBufferTimeout);
 
     const imageConfig = this.testImages[imageIndex] || this.testImages[this.currentImageIndex];
     const answer = (userAnswer || '').trim();
-
-    // Cevabı kaydet
-    // Aynı imageIndex için tekrar cevap geldiyse güncelle
-    const existingIdx = this.answers.findIndex(a => a.imageIndex === imageIndex);
+    const existingIdx = this.answers.findIndex((a) => a.imageIndex === imageIndex);
     if (existingIdx >= 0) {
       this.answers[existingIdx].userAnswer = answer;
-      log.info('Cevap güncellendi (record_visual_answer)', { sessionId: this.sessionId, imageIndex, answer: answer.substring(0, 50) });
     } else {
       this.answers.push({
         imageIndex,
         imageId: `image_${imageIndex}`,
         userAnswer: answer,
-        correctAnswer: imageConfig ? imageConfig.correctAnswer : '',
+        correctAnswer: imageConfig ? imageConfig.localizedCorrectAnswer : '',
       });
-      log.info('Cevap kaydedildi (record_visual_answer)', { sessionId: this.sessionId, imageIndex, answer: answer.substring(0, 50) });
     }
 
-    // Frontend'e bildir
     this.sendToClient({
       type: 'visual_test_answer_recorded',
       imageIndex,
@@ -375,49 +323,47 @@ class VisualTestAgent {
       totalImages: this.testImages.length,
     });
 
-    // Sırada görsel var mı?
     if (this.currentImageIndex + 1 < this.testImages.length) {
-      // Sonraki görseli üret ve göster
       await this._generateAndShowNextImage();
-
       return {
         success: true,
-        message: `Görsel ${imageIndex + 1} cevabı kaydedildi. Görsel ${this.currentImageIndex + 1}/${this.testImages.length} ekranda gösteriliyor. Kullanıcıya "Şimdi ekrandaki yeni görsele bakın. Ne görüyorsunuz?" diye sor ve cevabını bekle.`,
+        message: pickText(
+          this.language,
+          `Gorsel ${imageIndex + 1} cevabi kaydedildi. Simdi gorsel ${this.currentImageIndex + 1}/${this.testImages.length} ekranda.`,
+          `Answer for image ${imageIndex + 1} is saved. Image ${this.currentImageIndex + 1}/${this.testImages.length} is now on screen.`
+        ),
         currentImage: this.currentImageIndex + 1,
         totalImages: this.testImages.length,
         remainingImages: this.testImages.length - this.answers.length,
       };
-    } else {
-      // Tüm görseller tamamlandı
-      this.state = VT_STATE.DONE;
-      this.isActive = false;
-
-      // Frontend'e test bitti bildirimi
-      this.sendToClient({
-        type: 'visual_test_completed',
-        answeredCount: this.answers.length,
-        totalImages: this.testImages.length,
-      });
-
-      const answersForSubmit = this.answers.map(a => ({
-        imageIndex: a.imageIndex,
-        userAnswer: a.userAnswer,
-        correctAnswer: a.correctAnswer,
-      }));
-
-      return {
-        success: true,
-        allComplete: true,
-        message: `Tüm ${this.testImages.length} görsel cevaplandı. Şimdi submit_visual_recognition fonksiyonunu çağır: sessionId: "${this.sessionId}", answers: ${JSON.stringify(answersForSubmit)}. Submit ettikten sonra kullanıcıya "Görsel tanıma testini tamamladınız! Son testimize geçmeye hazır mısınız?" de.`,
-        answers: answersForSubmit,
-      };
     }
+
+    this.state = VT_STATE.DONE;
+    this.isActive = false;
+    this.sendToClient({
+      type: 'visual_test_completed',
+      answeredCount: this.answers.length,
+      totalImages: this.testImages.length,
+    });
+
+    const answersForSubmit = this.answers.map((a) => ({
+      imageIndex: a.imageIndex,
+      userAnswer: a.userAnswer,
+      correctAnswer: a.correctAnswer,
+    }));
+
+    return {
+      success: true,
+      allComplete: true,
+      message: pickText(
+        this.language,
+        `Tum ${this.testImages.length} gorsel cevaplandi. Simdi submit_visual_recognition fonksiyonunu cagir. sessionId: "${this.sessionId}", answers: ${JSON.stringify(answersForSubmit)}.`,
+        `All ${this.testImages.length} images are answered. Now call submit_visual_recognition with sessionId: "${this.sessionId}", answers: ${JSON.stringify(answersForSubmit)}.`
+      ),
+      answers: answersForSubmit,
+    };
   }
 
-  /**
-   * Dışarıdan cevabı zorla finalize et
-   * (Gemini cevabı algıladığında veya kullanıcı başka konuya geçtiğinde)
-   */
   forceFinalize() {
     if (this.state === VT_STATE.WAITING_ANSWER) {
       if (this.answerBufferTimeout) clearTimeout(this.answerBufferTimeout);
@@ -425,16 +371,10 @@ class VisualTestAgent {
     }
   }
 
-  /**
-   * Test aktif mi?
-   */
   get isTestActive() {
     return this.isActive;
   }
 
-  /**
-   * Mevcut durum bilgisi
-   */
   getStatus() {
     return {
       isActive: this.isActive,
@@ -445,9 +385,6 @@ class VisualTestAgent {
     };
   }
 
-  /**
-   * Bu session için seçilmiş keyword'leri döndürür
-   */
   getSelectedKeywords() {
     return this.testImages;
   }

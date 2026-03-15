@@ -9,6 +9,7 @@
 const prisma = require('../lib/prisma');
 const { createLogger } = require('../lib/logger');
 const { scoreVerbalFluency } = require('./scoring/verbalFluency');
+const { normalizeLanguage, pickText } = require('../lib/language');
 
 const log = createLogger('ToolHandler');
 const { scoreStoryRecall } = require('./scoring/storyRecall');
@@ -34,6 +35,21 @@ const brainAgents = new Map(); // sessionId -> BrainAgent
 
 // DateTime Agent referansları (session bazlı)
 const dateTimeAgents = new Map(); // sessionId -> DateTimeAgent
+
+// Session dil tercihleri (session bazlı)
+const sessionLanguages = new Map(); // sessionId -> 'tr' | 'en'
+
+function registerSessionLanguage(sessionId, language) {
+  sessionLanguages.set(sessionId, normalizeLanguage(language));
+}
+
+function unregisterSessionLanguage(sessionId) {
+  sessionLanguages.delete(sessionId);
+}
+
+function getSessionLanguage(sessionId) {
+  return sessionLanguages.get(sessionId) || 'tr';
+}
 
 function registerVisualTestAgent(sessionId, agent) {
   visualTestAgents.set(sessionId, agent);
@@ -154,11 +170,18 @@ async function handleToolCall(toolName, args, clientWs = null, sessionId = null)
       return await handleCompleteSession(args);
     default:
       log.warn('Bilinmeyen tool call', { toolName, sessionId });
-      return { error: `Bilinmeyen fonksiyon: ${toolName}` };
+      return {
+        error: pickText(
+          getSessionLanguage(sessionId),
+          `Bilinmeyen fonksiyon: ${toolName}`,
+          `Unknown function: ${toolName}`
+        ),
+      };
   }
 }
 
 async function handleVerbalFluency({ sessionId, words, targetLetter, durationSeconds }) {
+  const language = getSessionLanguage(sessionId);
   const result = scoreVerbalFluency(words, targetLetter);
 
   await prisma.testResult.upsert({
@@ -181,7 +204,11 @@ async function handleVerbalFluency({ sessionId, words, targetLetter, durationSec
 
   return {
     success: true,
-    message: `Sözel akıcılık testi kaydedildi. ${result.details.validWords.length} geçerli kelime bulundu.`,
+    message: pickText(
+      language,
+      `Sözel akıcılık testi kaydedildi. ${result.details.validWords.length} geçerli kelime bulundu.`,
+      `Verbal fluency test saved. ${result.details.validWords.length} valid words were found.`
+    ),
     validWordCount: result.details.validWords.length,
     score: result.score,
     maxScore: result.maxScore,
@@ -189,6 +216,7 @@ async function handleVerbalFluency({ sessionId, words, targetLetter, durationSec
 }
 
 async function handleStoryRecall({ sessionId, originalStory, recalledStory }) {
+  const language = getSessionLanguage(sessionId);
   const result = scoreStoryRecall(originalStory, recalledStory);
 
   await prisma.testResult.upsert({
@@ -211,7 +239,7 @@ async function handleStoryRecall({ sessionId, originalStory, recalledStory }) {
 
   return {
     success: true,
-    message: `Hikaye hatırlama testi kaydedildi.`,
+    message: pickText(language, 'Hikaye hatırlama testi kaydedildi.', 'Story recall test saved.'),
   };
 }
 
@@ -220,10 +248,11 @@ async function handleStoryRecall({ sessionId, originalStory, recalledStory }) {
  * Test 2 başlamadan önce çağrılır — Nöra'ya hikayeyi verir
  */
 async function handleGenerateStory({ sessionId }) {
+  const language = getSessionLanguage(sessionId);
   log.info('Hikaye üretimi istendi', { sessionId });
 
   try {
-    const result = await generateStory();
+    const result = await generateStory(language);
 
     log.info('Hikaye hazır', {
       sessionId,
@@ -237,14 +266,22 @@ async function handleGenerateStory({ sessionId }) {
       story: result.story,
       source: result.source,
       model: result.model || null,
-      message: `Hikaye ${result.source === 'ai' ? 'Gemini 3.1 Flash Lite ile üretildi' : 'havuzdan seçildi'}. Bu hikayeyi kullanıcıya anlat. Kullanıcı tekrar anlattıktan sonra submit_story_recall çağırırken originalStory olarak bu hikayeyi gönder.`,
+      message: pickText(
+        language,
+        `Hikaye ${result.source === 'ai' ? 'Gemini 3.1 Flash Lite ile üretildi' : 'havuzdan seçildi'}. Bu hikayeyi kullanıcıya anlat. Kullanıcı tekrar anlattıktan sonra submit_story_recall çağırırken originalStory olarak bu hikayeyi gönder.`,
+        `A story was ${result.source === 'ai' ? 'generated with Gemini 3.1 Flash Lite' : 'selected from the fallback pool'}. Tell this exact story to the user. After the user repeats it, call submit_story_recall and send this story in originalStory.`
+      ),
     };
   } catch (error) {
     log.error('Hikaye üretim hatası', { sessionId, error: error.message });
     return {
       success: false,
       error: error.message,
-      message: 'Hikaye üretilemedi. Lütfen kendi bilgine dayanarak kısa bir hikaye anlat.',
+      message: pickText(
+        language,
+        'Hikaye üretilemedi. Lütfen kendi bilgine dayanarak kısa bir hikaye anlat.',
+        'Story generation failed. Please tell a short story from your own knowledge.'
+      ),
     };
   }
 }
@@ -256,6 +293,7 @@ async function handleGenerateStory({ sessionId }) {
  * Görsel üretimi ve frontend'e gönderimi VisualTestAgent tarafından yapılır.
  */
 async function handleStartVisualTest({ sessionId }) {
+  const language = getSessionLanguage(sessionId);
   log.info('start_visual_test çağrıldı', { sessionId });
 
   const agent = visualTestAgents.get(sessionId);
@@ -263,7 +301,11 @@ async function handleStartVisualTest({ sessionId }) {
     log.error('VisualTestAgent bulunamadı', { sessionId });
     return {
       success: false,
-      message: 'Görsel test ajanı henüz hazır değil. Lütfen tekrar deneyin.',
+      message: pickText(
+        language,
+        'Görsel test ajanı henüz hazır değil. Lütfen tekrar deneyin.',
+        'Visual test agent is not ready yet. Please try again.'
+      ),
     };
   }
 
@@ -280,12 +322,16 @@ async function handleStartVisualTest({ sessionId }) {
  * VisualTestAgent cevabı kaydeder ve sonraki görsele geçer.
  */
 async function handleRecordVisualAnswer({ sessionId, imageIndex, userAnswer }) {
+  const language = getSessionLanguage(sessionId);
   log.info('record_visual_answer çağrıldı', { sessionId, imageIndex, userAnswer });
 
   const agent = visualTestAgents.get(sessionId);
   if (!agent) {
     log.error('VisualTestAgent bulunamadı', { sessionId });
-    return { success: false, message: 'Görsel test ajanı bulunamadı.' };
+    return {
+      success: false,
+      message: pickText(language, 'Görsel test ajanı bulunamadı.', 'Visual test agent was not found.'),
+    };
   }
 
   // Cevabı kaydet ve sonraki görsele geç
@@ -299,6 +345,7 @@ async function handleRecordVisualAnswer({ sessionId, imageIndex, userAnswer }) {
  * Eğer bu çağrılırsa, base64 veriyi Gemini'ye göndermez.
  */
 async function handleGenerateTestImage({ imageIndex, subject, sessionId }) {
+  const language = getSessionLanguage(sessionId);
   log.warn('Legacy generate_test_image çağrıldı — start_visual_test kullanılmalı', { imageIndex, subject });
 
   // VisualTestAgent varsa ona yönlendir
@@ -313,11 +360,16 @@ async function handleGenerateTestImage({ imageIndex, subject, sessionId }) {
     success: true,
     imageIndex,
     correctAnswer: subject,
-    message: `Görsel ${imageIndex + 1} ekranda gösteriliyor. Kullanıcıya ne gördüğünü sor ve cevabını bekle.`,
+    message: pickText(
+      language,
+      `Görsel ${imageIndex + 1} ekranda gösteriliyor. Kullanıcıya ne gördüğünü sor ve cevabını bekle.`,
+      `Image ${imageIndex + 1} is shown on screen. Ask the user what they see and wait for their answer.`
+    ),
   };
 }
 
 async function handleVisualRecognition({ sessionId, answers }) {
+  const language = getSessionLanguage(sessionId);
   const result = scoreVisualRecognition(answers);
 
   await prisma.testResult.upsert({
@@ -340,11 +392,12 @@ async function handleVisualRecognition({ sessionId, answers }) {
 
   return {
     success: true,
-    message: `Görsel tanıma testi kaydedildi.`,
+    message: pickText(language, 'Görsel tanıma testi kaydedildi.', 'Visual recognition test saved.'),
   };
 }
 
 async function handleOrientation({ sessionId, answers }) {
+  const language = getSessionLanguage(sessionId);
   const result = scoreOrientation(answers);
 
   await prisma.testResult.upsert({
@@ -367,13 +420,14 @@ async function handleOrientation({ sessionId, answers }) {
 
   return {
     success: true,
-    message: `Yönelim testi kaydedildi.`,
+    message: pickText(language, 'Yönelim testi kaydedildi.', 'Orientation test saved.'),
   };
 }
 
 // ─── Video Analysis Agent Tool Handlers ──────────────────────────
 
 async function handleStartVideoAnalysis({ sessionId }) {
+  const language = getSessionLanguage(sessionId);
   log.info('start_video_analysis çağrıldı', { sessionId });
 
   const agent = videoAnalysisAgents.get(sessionId);
@@ -381,7 +435,7 @@ async function handleStartVideoAnalysis({ sessionId }) {
     log.error('VideoAnalysisAgent bulunamadı', { sessionId });
     return {
       success: false,
-      message: 'Video analiz ajanı henüz hazır değil.',
+      message: pickText(language, 'Video analiz ajanı henüz hazır değil.', 'Video analysis agent is not ready yet.'),
     };
   }
 
@@ -398,11 +452,15 @@ async function handleStartVideoAnalysis({ sessionId }) {
 }
 
 async function handleStopVideoAnalysis({ sessionId }) {
+  const language = getSessionLanguage(sessionId);
   log.info('stop_video_analysis çağrıldı', { sessionId });
 
   const agent = videoAnalysisAgents.get(sessionId);
   if (!agent) {
-    return { success: false, message: 'Video analiz ajanı bulunamadı.' };
+    return {
+      success: false,
+      message: pickText(language, 'Video analiz ajanı bulunamadı.', 'Video analysis agent was not found.'),
+    };
   }
 
   const result = agent.stopAnalysis();
@@ -411,18 +469,26 @@ async function handleStopVideoAnalysis({ sessionId }) {
 
   return {
     success: true,
-    message: `Video analizi tamamlandı. ${result.totalAnalyses} kare analiz edildi.`,
+    message: pickText(
+      language,
+      `Video analizi tamamlandı. ${result.totalAnalyses} kare analiz edildi.`,
+      `Video analysis completed. ${result.totalAnalyses} frames were analyzed.`
+    ),
     summary: result.summary,
     presenceSummary,
   };
 }
 
 async function handleSendCameraCommand({ sessionId, command, params }) {
+  const language = getSessionLanguage(sessionId);
   log.info('send_camera_command çağrıldı', { sessionId, command });
 
   const agent = videoAnalysisAgents.get(sessionId);
   if (!agent) {
-    return { success: false, message: 'Video analiz ajanı bulunamadı.' };
+    return {
+      success: false,
+      message: pickText(language, 'Video analiz ajani bulunamadi.', 'Video analysis agent was not found.'),
+    };
   }
 
   return agent.sendCameraCommand(command, params || {});
@@ -431,12 +497,13 @@ async function handleSendCameraCommand({ sessionId, command, params }) {
 // ─── DateTime Agent Tool Handlers ──────────────────────────────
 
 async function handleGetCurrentDateTime({ sessionId }) {
+  const language = getSessionLanguage(sessionId);
   log.info('get_current_datetime çağrıldı', { sessionId });
 
   let agent = dateTimeAgents.get(sessionId);
   if (!agent) {
     // Otomatik oluştur
-    agent = new DateTimeAgent(sessionId);
+    agent = new DateTimeAgent(sessionId, language);
     dateTimeAgents.set(sessionId, agent);
   }
 
@@ -444,16 +511,21 @@ async function handleGetCurrentDateTime({ sessionId }) {
   return {
     success: true,
     ...dt,
-    message: `Güncel tarih: ${dt.formattedDate}, Saat: ${dt.formattedTime}, Gün: ${dt.dayOfWeek}, Mevsim: ${dt.season}`,
+    message: pickText(
+      language,
+      `Güncel tarih: ${dt.formattedDate}, Saat: ${dt.formattedTime}, Gün: ${dt.dayOfWeek}, Mevsim: ${dt.season}`,
+      `Current date: ${dt.formattedDate}, Time: ${dt.formattedTime}, Day: ${dt.dayOfWeek}, Season: ${dt.season}`
+    ),
   };
 }
 
 async function handleVerifyOrientationAnswer({ sessionId, questionType, userAnswer, context }) {
+  const language = getSessionLanguage(sessionId);
   log.info('verify_orientation_answer çağrıldı', { sessionId, questionType, userAnswer });
 
   let agent = dateTimeAgents.get(sessionId);
   if (!agent) {
-    agent = new DateTimeAgent(sessionId);
+    agent = new DateTimeAgent(sessionId, language);
     dateTimeAgents.set(sessionId, agent);
   }
 
@@ -470,9 +542,11 @@ async function handleVerifyOrientationAnswer({ sessionId, questionType, userAnsw
       });
       if (typeof brainAgent.sendTextToLive === 'function') {
         brainAgent.sendTextToLive(
-          'ORIENTATION_GUARD: Henüz kullanıcıdan cevap gelmedi. ' +
-          'Soruyu tekrar sor, sonra kullanıcı cevabını bekle. ' +
-          'Cevap almadan verify_orientation_answer çağırma.'
+          pickText(
+            language,
+            'ORIENTATION_GUARD: Henüz kullanıcıdan cevap gelmedi. Soruyu tekrar sor, sonra kullanıcı cevabını bekle. Cevap almadan verify_orientation_answer çağırma.',
+            'ORIENTATION_GUARD: There is no fresh user answer yet. Ask the question again, then wait for the user response. Do not call verify_orientation_answer without a user answer.'
+          )
         );
       }
       return {
@@ -480,7 +554,11 @@ async function handleVerifyOrientationAnswer({ sessionId, questionType, userAnsw
         blocked: true,
         reason: 'NO_FRESH_USER_ANSWER',
         questionType,
-        message: 'Henüz kullanıcıdan net bir cevap alınmadı. Soruyu tekrar sor ve kullanıcının cevabını bekle.',
+        message: pickText(
+          language,
+          'Henüz kullanıcıdan net bir cevap alınmadı. Soruyu tekrar sor ve kullanıcının cevabını bekle.',
+          'No clear user answer has been received yet. Ask the question again and wait for the user response.'
+        ),
       };
     }
     effectiveUserAnswer = realUserInput;
@@ -490,13 +568,22 @@ async function handleVerifyOrientationAnswer({ sessionId, questionType, userAnsw
   return {
     success: true,
     ...verification,
-    message: verification.isCorrect 
-      ? `Doğru cevap. (${verification.tolerance || 'Tam eşleşme'})` 
-      : `Yanlış cevap. Doğru: ${verification.correctAnswer}`,
+    message: verification.isCorrect
+      ? pickText(
+          language,
+          `Doğru cevap. (${verification.tolerance || 'Tam eşleşme'})`,
+          `Correct answer. (${verification.tolerance || 'Exact match'})`
+        )
+      : pickText(
+          language,
+          `Yanlış cevap. Doğru: ${verification.correctAnswer}`,
+          `Incorrect answer. Correct: ${verification.correctAnswer}`
+        ),
   };
 }
 
 async function handleCompleteSession({ sessionId }) {
+  const language = getSessionLanguage(sessionId);
   const testResults = await prisma.testResult.findMany({
     where: { sessionId },
   });
@@ -525,7 +612,11 @@ async function handleCompleteSession({ sessionId }) {
     maxPossible,
     percentage: Math.round(percentage),
     riskLevel,
-    message: `Oturum tamamlandı. Toplam puan: ${totalScore}/${maxPossible}`,
+    message: pickText(
+      language,
+      `Oturum tamamlandı. Toplam puan: ${totalScore}/${maxPossible}`,
+      `Session completed. Total score: ${totalScore}/${maxPossible}`
+    ),
   };
 }
 
@@ -548,4 +639,7 @@ module.exports = {
   registerDateTimeAgent,
   unregisterDateTimeAgent,
   getDateTimeAgent,
+  registerSessionLanguage,
+  unregisterSessionLanguage,
+  getSessionLanguage,
 };

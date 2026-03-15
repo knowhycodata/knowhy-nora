@@ -13,13 +13,14 @@ const authRoutes = require('./routes/auth');
 const sessionRoutes = require('./routes/sessions');
 const testRoutes = require('./routes/tests');
 const { GeminiLiveSession } = require('./services/geminiLive');
-const { handleToolCall, registerGeminiSession, unregisterGeminiSession, registerVisualTestAgent, unregisterVisualTestAgent, registerVideoAnalysisAgent, unregisterVideoAnalysisAgent, getVideoAnalysisAgent, registerCameraPresenceAgent, unregisterCameraPresenceAgent, getCameraPresenceAgent, registerBrainAgent, unregisterBrainAgent, registerDateTimeAgent, unregisterDateTimeAgent } = require('./services/toolHandler');
+const { handleToolCall, registerGeminiSession, unregisterGeminiSession, registerVisualTestAgent, unregisterVisualTestAgent, registerVideoAnalysisAgent, unregisterVideoAnalysisAgent, getVideoAnalysisAgent, registerCameraPresenceAgent, unregisterCameraPresenceAgent, getCameraPresenceAgent, registerBrainAgent, unregisterBrainAgent, registerDateTimeAgent, unregisterDateTimeAgent, registerSessionLanguage, unregisterSessionLanguage } = require('./services/toolHandler');
 const { BrainAgent } = require('./services/brainAgent');
 const { VisualTestAgent } = require('./services/visualTestAgent');
 const { VideoAnalysisAgent } = require('./services/videoAnalysisAgent');
 const { CameraPresenceAgent } = require('./services/cameraPresenceAgent');
 const { DateTimeAgent } = require('./services/dateTimeAgent');
 const prisma = require('./lib/prisma');
+const { normalizeLanguage } = require('./lib/language');
 
 const log = createLogger('Server');
 
@@ -77,6 +78,7 @@ wss.on('connection', async (ws, req) => {
   let geminiSession = null;
   let userId = null;
   let testSessionId = null;
+  let sessionLanguage = 'tr';
 
   ws.on('message', async (rawData) => {
     try {
@@ -116,7 +118,8 @@ wss.on('connection', async (ws, req) => {
               return;
             }
 
-            log.info('Creating test session', { clientId, userId });
+            sessionLanguage = normalizeLanguage(message.language);
+            log.info('Creating test session', { clientId, userId, language: sessionLanguage });
 
             // Yeni test oturumu oluştur
             const session = await prisma.testSession.create({
@@ -124,11 +127,12 @@ wss.on('connection', async (ws, req) => {
             });
             testSessionId = session.id;
             log.info('Test session created', { clientId, testSessionId });
+            registerSessionLanguage(testSessionId, sessionLanguage);
 
             // Gemini Live oturumu başlat
             geminiSession = new GeminiLiveSession(ws, testSessionId, (toolName, args) => {
               return handleToolCall(toolName, { ...args, sessionId: testSessionId }, ws, testSessionId);
-            });
+            }, { language: sessionLanguage });
             
             // Brain Agent oluştur - transkript analiz ve timer yönetimi
             const brainAgent = new BrainAgent(
@@ -144,7 +148,8 @@ wss.on('connection', async (ws, req) => {
                 if (geminiSession) {
                   geminiSession.sendText(text);
                 }
-              }
+              },
+              sessionLanguage
             );
             geminiSession.brainAgent = brainAgent;
             registerBrainAgent(testSessionId, brainAgent);
@@ -163,7 +168,8 @@ wss.on('connection', async (ws, req) => {
                 if (geminiSession) {
                   geminiSession.sendText(text);
                 }
-              }
+              },
+              sessionLanguage
             );
             registerVisualTestAgent(testSessionId, visualTestAgent);
             
@@ -184,7 +190,8 @@ wss.on('connection', async (ws, req) => {
                 if (geminiSession) {
                   geminiSession.sendText(text);
                 }
-              }
+              },
+              sessionLanguage
             );
             registerVideoAnalysisAgent(testSessionId, videoAnalysisAgent);
 
@@ -200,12 +207,13 @@ wss.on('connection', async (ws, req) => {
                 if (geminiSession) {
                   geminiSession.sendText(text);
                 }
-              }
+              },
+              sessionLanguage
             );
             registerCameraPresenceAgent(testSessionId, cameraPresenceAgent);
             
             // DateTimeAgent oluştur - Test 4 tarih/saat doğrulama
-            const dateTimeAgent = new DateTimeAgent(testSessionId);
+            const dateTimeAgent = new DateTimeAgent(testSessionId, sessionLanguage);
             registerDateTimeAgent(testSessionId, dateTimeAgent);
             
             // Brain Agent'a VideoAnalysisAgent referansını ver
@@ -222,6 +230,7 @@ wss.on('connection', async (ws, req) => {
               ws.send(JSON.stringify({
                 type: 'session_started',
                 sessionId: testSessionId,
+                language: sessionLanguage,
               }));
             } else {
               log.error('Gemini Live connection failed', { clientId, testSessionId });
@@ -268,6 +277,7 @@ wss.on('connection', async (ws, req) => {
               unregisterCameraPresenceAgent(testSessionId);
               unregisterBrainAgent(testSessionId);
               unregisterDateTimeAgent(testSessionId);
+              unregisterSessionLanguage(testSessionId);
               geminiSession = null;
             }
             ws.send(JSON.stringify({ type: 'session_ended' }));
@@ -307,6 +317,7 @@ wss.on('connection', async (ws, req) => {
       unregisterCameraPresenceAgent(testSessionId);
       unregisterBrainAgent(testSessionId);
       unregisterDateTimeAgent(testSessionId);
+      unregisterSessionLanguage(testSessionId);
     }
   });
 
@@ -320,6 +331,7 @@ wss.on('connection', async (ws, req) => {
       unregisterCameraPresenceAgent(testSessionId);
       unregisterBrainAgent(testSessionId);
       unregisterDateTimeAgent(testSessionId);
+      unregisterSessionLanguage(testSessionId);
     }
   });
 });

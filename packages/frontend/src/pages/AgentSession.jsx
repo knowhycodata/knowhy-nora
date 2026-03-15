@@ -5,6 +5,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { useGeminiLive, SESSION_STATES } from '../hooks/useGeminiLive';
 import { createLogger } from '../lib/logger';
 import TranscriptPanel from '../components/TranscriptPanel';
@@ -13,25 +14,17 @@ import CameraModal from '../components/CameraModal';
 
 const log = createLogger('AgentSession');
 
-// Test adımları tanımı
-const TEST_STEPS = [
-  { key: 'verbal_fluency', label: 'Sözel Akıcılık', icon: '🗣️' },
-  { key: 'story_recall', label: 'Hikaye Hatırlama', icon: '📖' },
-  { key: 'visual_recognition', label: 'Görsel Tanıma', icon: '👁️' },
-  { key: 'orientation', label: 'Yönelim', icon: '🧭' },
-];
-
-function getTestIndex(currentTest) {
+function getTestIndex(currentTest, testSteps) {
   if (!currentTest) return -1;
   const base = currentTest.replace('_done', '');
-  return TEST_STEPS.findIndex(s => s.key === base);
+  return testSteps.findIndex(s => s.key === base);
 }
 
-function isTestDone(currentTest, stepKey) {
+function isTestDone(currentTest, stepKey, testSteps) {
   if (!currentTest) return false;
   if (currentTest === 'all_done') return true;
-  const currentIdx = getTestIndex(currentTest);
-  const stepIdx = TEST_STEPS.findIndex(s => s.key === stepKey);
+  const currentIdx = getTestIndex(currentTest, testSteps);
+  const stepIdx = testSteps.findIndex(s => s.key === stepKey);
   if (currentTest.endsWith('_done')) return stepIdx <= currentIdx;
   return stepIdx < currentIdx;
 }
@@ -45,19 +38,34 @@ function isTestActive(currentTest, stepKey) {
 
 export default function AgentSession() {
   const navigate = useNavigate();
-  const { user, token } = useAuth();
+  const { token } = useAuth();
+  const { t, language } = useLanguage();
   const gemini = useGeminiLive();
   const [showTranscript, setShowTranscript] = useState(false);
   const hasStarted = useRef(false);
 
+  const TEST_STEPS = [
+    { key: 'verbal_fluency', label: t('agentSession.steps.verbalFluency'), icon: '🗣️' },
+    { key: 'story_recall', label: t('agentSession.steps.storyRecall'), icon: '📖' },
+    { key: 'visual_recognition', label: t('agentSession.steps.visualRecognition'), icon: '👁️' },
+    { key: 'orientation', label: t('agentSession.steps.orientation'), icon: '🧭' },
+  ];
+
   useEffect(() => {
     if (!token) { navigate('/login'); return; }
     if (hasStarted.current) return;
+    const languageConfirmed = sessionStorage.getItem('session_language_confirmed') === '1';
+    if (!languageConfirmed) {
+      gemini.disconnect();
+      navigate('/dashboard');
+      return;
+    }
+    sessionStorage.removeItem('session_language_confirmed');
     hasStarted.current = true;
-    gemini.connectAndStart(token).catch((err) => {
+    gemini.connectAndStart(token, { language }).catch((err) => {
       log.error('connectAndStart failed', { error: err.message });
     });
-  }, [token]);
+  }, [token, language]);
 
   useEffect(() => {
     if (gemini.state === SESSION_STATES.COMPLETED && gemini.sessionId) {
@@ -100,12 +108,12 @@ export default function AgentSession() {
       {/* ─── Üst Bar ─── */}
       <header className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gray-900 flex items-center justify-center">
-            <span className="text-white text-sm font-semibold">N</span>
-          </div>
+            <div className="w-8 h-8 rounded-lg bg-gray-900 flex items-center justify-center">
+              <span className="text-white text-sm font-semibold">N</span>
+            </div>
           <div>
-            <h1 className="text-sm font-semibold text-gray-900">Nöra</h1>
-            <p className="text-[11px] text-gray-400">Bilişsel Tarama Asistanı</p>
+            <h1 className="text-sm font-semibold text-gray-900">{t('common.appName')}</h1>
+            <p className="text-[11px] text-gray-400">{t('agentSession.assistantSubtitle')}</p>
           </div>
         </div>
 
@@ -113,7 +121,7 @@ export default function AgentSession() {
           <button
             onClick={() => setShowTranscript(!showTranscript)}
             className="p-2.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all"
-            title="Konuşma kaydı"
+            title={t('agentSession.transcript')}
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -123,7 +131,7 @@ export default function AgentSession() {
             onClick={handleEnd}
             className="px-4 py-2 rounded-lg text-sm text-gray-500 hover:text-red-500 hover:bg-red-50 transition-all"
           >
-            Bitir
+            {t('agentSession.end')}
           </button>
         </div>
       </header>
@@ -137,14 +145,14 @@ export default function AgentSession() {
             <div 
               className="absolute top-5 left-[10%] h-0.5 bg-gray-900 z-0 transition-all duration-700 ease-out"
               style={{
-                width: gemini.currentTest === 'all_done' 
+                width: gemini.currentTest === 'all_done'
                   ? '80%' 
-                  : `${Math.max(0, (getTestIndex(gemini.currentTest) + (gemini.currentTest?.endsWith('_done') ? 1 : 0.5)) / TEST_STEPS.length) * 80}%`
+                  : `${Math.max(0, (getTestIndex(gemini.currentTest, TEST_STEPS) + (gemini.currentTest?.endsWith('_done') ? 1 : 0.5)) / TEST_STEPS.length) * 80}%`
               }}
             />
             
             {TEST_STEPS.map((step, i) => {
-              const done = isTestDone(gemini.currentTest, step.key);
+              const done = isTestDone(gemini.currentTest, step.key, TEST_STEPS);
               const active = isTestActive(gemini.currentTest, step.key);
               return (
                 <div key={step.key} className="flex flex-col items-center relative z-10">
@@ -184,7 +192,7 @@ export default function AgentSession() {
         {isConnecting && (
           <div className="flex-1 flex flex-col items-center justify-center gap-4 animate-fade-in">
             <div className="w-12 h-12 rounded-full border-2 border-gray-100 border-t-gray-900 animate-spin" />
-            <p className="text-sm text-gray-400">Nöra'ya bağlanılıyor...</p>
+            <p className="text-sm text-gray-400">{t('agentSession.connecting')}</p>
           </div>
         )}
 
@@ -260,7 +268,7 @@ export default function AgentSession() {
             <p className={`text-sm font-medium transition-colors ${
               gemini.isSpeaking ? 'text-gray-900' : gemini.isRecording ? 'text-gray-700' : 'text-gray-400'
             }`}>
-              {gemini.isSpeaking ? 'Nöra konuşuyor...' : gemini.isRecording ? 'Dinliyorum...' : 'Hazır'}
+              {gemini.isSpeaking ? t('agentSession.speaking') : gemini.isRecording ? t('agentSession.listening') : t('agentSession.ready')}
             </p>
             {/* Timer */}
             {gemini.timer && gemini.timer.active && (
@@ -282,8 +290,8 @@ export default function AgentSession() {
                     </div>
                   </div>
                   <div>
-                    <p className="text-xs font-medium text-gray-900">Süre devam ediyor</p>
-                    <p className="text-[11px] text-gray-400">Kelimeler söyleyin...</p>
+                    <p className="text-xs font-medium text-gray-900">{t('agentSession.timerActiveTitle')}</p>
+                    <p className="text-[11px] text-gray-400">{t('agentSession.timerActiveHint')}</p>
                   </div>
                 </div>
               </div>
@@ -296,7 +304,7 @@ export default function AgentSession() {
                   <svg className="w-4 h-4 text-gray-700" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
-                  <p className="text-xs font-medium text-gray-700">Süre tamamlandı</p>
+                  <p className="text-xs font-medium text-gray-700">{t('agentSession.timerComplete')}</p>
                 </div>
               </div>
             )}
@@ -325,8 +333,8 @@ export default function AgentSession() {
               </svg>
             </div>
             <div className="text-center">
-              <p className="text-lg font-semibold text-gray-900">Testler Tamamlandı</p>
-              <p className="text-sm text-gray-400 mt-1">Sonuç sayfasına yönlendiriliyorsunuz...</p>
+              <p className="text-lg font-semibold text-gray-900">{t('agentSession.testsCompleted')}</p>
+              <p className="text-sm text-gray-400 mt-1">{t('agentSession.redirectingResults')}</p>
             </div>
           </div>
         )}
@@ -339,16 +347,16 @@ export default function AgentSession() {
             gemini.isRecording ? 'bg-gray-900 animate-pulse' : 'bg-gray-300'
           }`} />
           <span className="text-xs text-gray-400">
-            {gemini.isRecording ? 'Mikrofon aktif' : 'Mikrofon kapalı'}
+            {gemini.isRecording ? t('agentSession.micActive') : t('agentSession.micOff')}
           </span>
         </div>
         <div className="w-px h-4 bg-gray-200" />
         <span className="text-xs text-gray-300">
           {gemini.state === SESSION_STATES.ACTIVE || gemini.state === SESSION_STATES.LISTENING || gemini.state === SESSION_STATES.SPEAKING 
-            ? 'Oturum devam ediyor' 
+            ? t('agentSession.sessionActive')
             : gemini.state === SESSION_STATES.COMPLETED 
-              ? 'Oturum tamamlandı' 
-              : 'Bağlantı kuruluyor'}
+              ? t('agentSession.sessionDone')
+              : t('agentSession.sessionConnecting')}
         </span>
       </footer>
 

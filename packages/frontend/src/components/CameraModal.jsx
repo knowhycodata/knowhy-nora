@@ -1,4 +1,5 @@
 import CameraPanel from './CameraPanel';
+import { useLanguage } from '../context/LanguageContext';
 
 export default function CameraModal({
   isOpen,
@@ -8,6 +9,7 @@ export default function CameraModal({
   presenceAlert,
   onClose = null,
 }) {
+  const { t } = useLanguage();
   if (!isOpen) return null;
 
   return (
@@ -17,14 +19,14 @@ export default function CameraModal({
       <div className="relative z-10 w-full max-w-3xl">
         <div className="mb-3 flex items-center justify-between rounded-xl bg-white/95 border border-slate-200 px-4 py-3 shadow-lg">
           <div>
-            <p className="text-sm font-semibold text-slate-900">Test 4 Kamera Penceresi</p>
-            <p className="text-xs text-slate-500">Yönelim testi boyunca yüzünüz kadrajda görünsün.</p>
+            <p className="text-sm font-semibold text-slate-900">{t('camera.modalTitle')}</p>
+            <p className="text-xs text-slate-500">{t('camera.modalSubtitle')}</p>
           </div>
           {onClose && (
             <button
               onClick={onClose}
               className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
-              title="Kapat"
+              title={t('common.close')}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="18" x2="6" y1="6" y2="18" />

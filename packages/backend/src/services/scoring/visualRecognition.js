@@ -13,8 +13,8 @@ function scoreVisualRecognition(answers) {
   const detailedResults = [];
 
   for (const answer of answers) {
-    const correct = answer.correctAnswer.toLocaleLowerCase('tr').trim();
-    const user = (answer.userAnswer || '').toLocaleLowerCase('tr').trim();
+    const correct = String(answer.correctAnswer || '').toLowerCase().trim();
+    const user = String(answer.userAnswer || '').toLowerCase().trim();
 
     if (!user) {
       detailedResults.push({
