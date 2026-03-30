@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import api from '../lib/api';
@@ -6,9 +6,36 @@ import api from '../lib/api';
 export default function Results() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { t, formatDate } = useLanguage();
+  const { t, language, formatDate } = useLanguage();
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfError, setPdfError] = useState(null);
+
+  const handlePdfDownload = useCallback(async () => {
+    if (!id) return;
+    setPdfLoading(true);
+    setPdfError(null);
+    try {
+      const response = await api.get(`/sessions/${id}/pdf?lang=${language}`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `nora-report-${id.substring(0, 8)}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('PDF download error:', err);
+      setPdfError(t('results.pdfError') || 'PDF indirme hatası');
+    } finally {
+      setPdfLoading(false);
+    }
+  }, [id, language, t]);
 
   const testTypeLabels = useMemo(
     () => ({
@@ -174,12 +201,20 @@ export default function Results() {
 
         <div className="mt-8 text-center">
           <button
-            className="inline-flex items-center gap-2 px-6 py-3 bg-gray-900 text-white font-medium rounded-lg hover:bg-gray-800 transition-all text-sm"
-            onClick={() => alert(t('results.pdfPreparing'))}
+            className="inline-flex items-center gap-2 px-6 py-3 bg-gray-900 text-white font-medium rounded-lg hover:bg-gray-800 transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={handlePdfDownload}
+            disabled={pdfLoading}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-            {t('results.pdfDownload')}
+            {pdfLoading ? (
+              <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+            )}
+            {pdfLoading ? t('results.pdfPreparing') : t('results.pdfDownload')}
           </button>
+          {pdfError && (
+            <p className="mt-2 text-sm text-red-500">{pdfError}</p>
+          )}
         </div>
 
         <div className="mt-8 rounded-2xl border border-gray-100 bg-gray-50 p-5">

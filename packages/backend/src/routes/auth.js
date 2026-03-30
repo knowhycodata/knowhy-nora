@@ -11,9 +11,23 @@ const router = express.Router();
 router.post(
   '/register',
   [
-    body('email').isEmail().withMessage('Geçerli bir e-posta adresi girin'),
-    body('password').isLength({ min: 6 }).withMessage('Şifre en az 6 karakter olmalı'),
-    body('name').trim().notEmpty().withMessage('İsim gerekli'),
+    body('email')
+      .isEmail().withMessage('Geçerli bir e-posta adresi girin')
+      .normalizeEmail()
+      .isLength({ max: 254 }).withMessage('E-posta çok uzun'),
+    body('password')
+      .isLength({ min: 6, max: 128 }).withMessage('Şifre 6-128 karakter arası olmalı')
+      .custom((value) => {
+        if (/^\s+$/.test(value)) {
+          throw new Error('Şifre sadece boşluk karakterlerinden oluşamaz');
+        }
+        return true;
+      }),
+    body('name')
+      .trim()
+      .notEmpty().withMessage('İsim gerekli')
+      .isLength({ max: 100 }).withMessage('İsim en fazla 100 karakter olabilir')
+      .escape(),
   ],
   async (req, res) => {
     try {
@@ -52,8 +66,8 @@ router.post(
 router.post(
   '/login',
   [
-    body('email').isEmail().withMessage('Geçerli bir e-posta adresi girin'),
-    body('password').notEmpty().withMessage('Şifre gerekli'),
+    body('email').isEmail().withMessage('Geçerli bir e-posta adresi girin').normalizeEmail(),
+    body('password').notEmpty().withMessage('Şifre gerekli').isLength({ max: 128 }).withMessage('Şifre çok uzun'),
   ],
   async (req, res) => {
     try {

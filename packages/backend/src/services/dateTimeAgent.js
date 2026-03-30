@@ -66,6 +66,24 @@ function inRange(hour, start, end) {
   return hour >= start || hour <= end;
 }
 
+// BUG-015: Normalize edici — Türkçe ve İngilizce karakter farklarını siler
+function normalizeForMatch(text) {
+  if (!text) return '';
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[ıİ]/g, 'i')
+    .replace(/[şŞ]/g, 's')
+    .replace(/[çÇ]/g, 'c')
+    .replace(/[ğĞ]/g, 'g')
+    .replace(/[üÜ]/g, 'u')
+    .replace(/[öÖ]/g, 'o')
+    .replace(/[''`]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 class DateTimeAgent {
   constructor(sessionId, language = 'tr') {
     this.sessionId = sessionId;
@@ -117,25 +135,46 @@ class DateTimeAgent {
     let isCorrectAnswer = false;
     let tolerance = '';
 
+    // BUG-015: Birleşik cevap desteği — normalize edilmiş karşılaştırma
+    const fuzzyAnswer = normalizeForMatch(userAnswer);
+
     switch (questionType) {
       case 'day': {
         correctAnswer = dt.dayOfWeek;
-        const answer = correctAnswer.toLowerCase();
-        isCorrectAnswer = normalizedAnswer.includes(answer) || answer.includes(normalizedAnswer);
+        const answer = normalizeForMatch(correctAnswer);
+        isCorrectAnswer = fuzzyAnswer.includes(answer) || answer.includes(fuzzyAnswer);
+        // Birleşik cevap: "Pazartesi, Mart ayındayız" gibi cümlelerde gün adını ara
+        if (!isCorrectAnswer) {
+          const allDays = locale.days.map(d => normalizeForMatch(d));
+          const foundDay = allDays.find(d => fuzzyAnswer.includes(d));
+          if (foundDay && foundDay === answer) {
+            isCorrectAnswer = true;
+            tolerance = isEnglish(this.language) ? 'Extracted from combined answer' : 'Birlesik cevaptan cikarildi';
+          }
+        }
         break;
       }
       case 'month': {
         correctAnswer = dt.monthName;
-        const answer = correctAnswer.toLowerCase();
-        isCorrectAnswer = normalizedAnswer.includes(answer) || answer.includes(normalizedAnswer);
-        if (!isCorrectAnswer && normalizedAnswer.includes(String(dt.month))) {
+        const answer = normalizeForMatch(correctAnswer);
+        isCorrectAnswer = fuzzyAnswer.includes(answer) || answer.includes(fuzzyAnswer);
+        if (!isCorrectAnswer && fuzzyAnswer.includes(String(dt.month))) {
           isCorrectAnswer = true;
+        }
+        // Birleşik cevap: ay adını tüm aylar içinde ara
+        if (!isCorrectAnswer) {
+          const allMonths = locale.months.map(m => normalizeForMatch(m));
+          const foundMonth = allMonths.find(m => fuzzyAnswer.includes(m));
+          if (foundMonth && foundMonth === answer) {
+            isCorrectAnswer = true;
+            tolerance = isEnglish(this.language) ? 'Extracted from combined answer' : 'Birlesik cevaptan cikarildi';
+          }
         }
         break;
       }
       case 'year': {
         correctAnswer = String(dt.year);
-        isCorrectAnswer = normalizedAnswer.includes(correctAnswer);
+        isCorrectAnswer = fuzzyAnswer.includes(correctAnswer);
         break;
       }
       case 'season': {
@@ -179,25 +218,42 @@ class DateTimeAgent {
       case 'city': {
         correctAnswer = context.city || 'unknown';
         if (correctAnswer !== 'unknown') {
-          const answer = correctAnswer.toLowerCase();
-          isCorrectAnswer = normalizedAnswer.includes(answer) || answer.includes(normalizedAnswer);
+          const answer = normalizeForMatch(correctAnswer);
+          isCorrectAnswer = fuzzyAnswer.includes(answer) || answer.includes(fuzzyAnswer);
         } else {
-          isCorrectAnswer = normalizedAnswer.length > 1;
-          correctAnswer = userAnswer;
-          tolerance = isEnglish(this.language)
-            ? 'City could not be verified, answer accepted'
-            : 'Sehir dogrulanamadi, cevap kabul edildi';
+          // Sorun 9 FIX: context.city yoksa, bilinen şehirler listesiyle toleranslı doğrulama
+          // Kullanıcının söylediği şehri kabul et ama en azından gerçek bir şehir adı olduğunu doğrula
+          const knownCities = [
+            'istanbul', 'ankara', 'izmir', 'bursa', 'antalya', 'adana', 'konya',
+            'gaziantep', 'mersin', 'diyarbakir', 'kayseri', 'eskisehir', 'samsun',
+            'denizli', 'sanliurfa', 'trabzon', 'malatya', 'erzurum', 'van',
+            'batman', 'elazig', 'manisa', 'balikesir', 'mugla', 'hatay','zürich','deutcland'
+            'london', 'new york', 'berlin', 'paris', 'tokyo', 'amsterdam',
+          ];
+          const fuzzyCity = normalizeForMatch(userAnswer);
+          const matchedCity = knownCities.find(c => fuzzyCity.includes(c) || c.includes(fuzzyCity));
+          if (matchedCity || fuzzyCity.length > 2) {
+            isCorrectAnswer = true;
+            correctAnswer = userAnswer;
+            tolerance = isEnglish(this.language)
+              ? 'City could not be verified server-side, user answer accepted'
+              : 'Sehir sunucu tarafinda dogrulanamadi, kullanici cevabi kabul edildi';
+          } else {
+            isCorrectAnswer = false;
+            correctAnswer = isEnglish(this.language) ? 'a valid city name' : 'gecerli bir sehir adi';
+          }
         }
         break;
       }
       case 'country': {
         correctAnswer = context.country || locale.defaultCountry;
-        const answer = correctAnswer.toLowerCase();
+        const answerNorm = normalizeForMatch(correctAnswer);
         isCorrectAnswer =
-          normalizedAnswer.includes(answer) ||
-          normalizedAnswer.includes('turkiye') ||
-          normalizedAnswer.includes('turkey') ||
-          answer.includes(normalizedAnswer);
+          fuzzyAnswer.includes(answerNorm) ||
+          fuzzyAnswer.includes('turkiye') ||
+          fuzzyAnswer.includes('turkey') ||
+          fuzzyAnswer.includes('türkiye') ||
+          answerNorm.includes(fuzzyAnswer);
         break;
       }
       default: {

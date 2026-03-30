@@ -106,6 +106,7 @@ export function useGeminiLive() {
   
   // Timer state
   const [timer, setTimer] = useState(null); // { duration, remaining, testType, active }
+  const timerActiveRef = useRef(false); // BUG-009 FIX: race condition guard
   
   // Camera / Video Analysis state
   const [cameraActive, setCameraActive] = useState(false);
@@ -115,6 +116,11 @@ export function useGeminiLive() {
 
   const wsRef = useRef(null);
   const stateRef = useRef(state);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimerRef = useRef(null);
+  const lastTokenRef = useRef(null);
+  const lastOptionsRef = useRef({});
+  const MAX_RECONNECT_ATTEMPTS = 3;
   const recorderCtxRef = useRef(null);
   const recorderNodeRef = useRef(null);
   const micSourceRef = useRef(null);
@@ -401,7 +407,9 @@ export function useGeminiLive() {
         break;
 
       case 'output_transcription':
-        addTranscript('agent', message.text);
+        // BUG-007 FIX: Ajan transcript'i audio'dan önce gelir.
+        // Kısa gecikme ile sesle senkronize gösterim sağlanır.
+        setTimeout(() => addTranscript('agent', message.text), 350);
         break;
 
       case 'text':
@@ -589,6 +597,7 @@ export function useGeminiLive() {
         
       case 'timer_started':
         log.info('Timer started', { timerId: message.timerId, duration: message.durationSeconds });
+        timerActiveRef.current = true;
         setCurrentTest('verbal_fluency');
         setTimer({
           id: message.timerId,
@@ -601,11 +610,13 @@ export function useGeminiLive() {
         
       case 'timer_complete':
         log.info('Timer complete', { timerId: message.timerId });
+        timerActiveRef.current = false;
         setTimer(prev => prev ? { ...prev, active: false, remaining: 0 } : null);
         break;
         
       case 'timer_stopped':
         log.info('Timer stopped by user', { timerId: message.timerId, remaining: message.remaining });
+        timerActiveRef.current = false;
         setTimer(prev => prev ? { ...prev, active: false, remaining: message.remaining || 0 } : null);
         break;
 
@@ -679,6 +690,8 @@ export function useGeminiLive() {
     log.info('connectAndStart called', { hasToken: !!token, wsExists: !!wsRef.current });
     completionLockedRef.current = false;
     sessionLanguageRef.current = normalizeLanguage(options.language);
+    lastTokenRef.current = token;
+    lastOptionsRef.current = options;
     
     if (wsRef.current) {
       log.warn('Already connected, skipping');
@@ -738,8 +751,47 @@ export function useGeminiLive() {
     ws.onclose = (event) => {
       log.info('WebSocket closed', { code: event.code, reason: event.reason });
       wsRef.current = null;
-      if (!completionLockedRef.current && stateRef.current !== SESSION_STATES.COMPLETED) {
-        setState(SESSION_STATES.IDLE);
+
+      const isActiveSession = !completionLockedRef.current &&
+        stateRef.current !== SESSION_STATES.COMPLETED &&
+        stateRef.current !== SESSION_STATES.IDLE;
+
+      // Normal kapanma (1000) veya kullanıcı tarafından kapatma reconnect tetiklemez
+      const isAbnormal = event.code !== 1000 && event.code !== 1005;
+
+      if (isActiveSession && isAbnormal && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+        reconnectAttemptsRef.current++;
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current - 1), 8000);
+        log.warn('Beklenmedik WS kapanması, yeniden bağlanılıyor...', {
+          attempt: reconnectAttemptsRef.current,
+          maxAttempts: MAX_RECONNECT_ATTEMPTS,
+          delayMs: delay,
+          code: event.code,
+        });
+        setError(pickText(
+          sessionLanguageRef.current,
+          `Bağlantı koptu, yeniden bağlanılıyor... (Deneme ${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`,
+          `Connection lost, reconnecting... (Attempt ${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`
+        ));
+        setState(SESSION_STATES.CONNECTING);
+
+        reconnectTimerRef.current = setTimeout(() => {
+          if (lastTokenRef.current) {
+            connectAndStart(lastTokenRef.current, lastOptionsRef.current);
+          }
+        }, delay);
+      } else if (!completionLockedRef.current && stateRef.current !== SESSION_STATES.COMPLETED) {
+        if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+          log.error('Maksimum reconnect denemesi aşıldı');
+          setError(pickText(
+            sessionLanguageRef.current,
+            'Bağlantı kurulamadı. Lütfen sayfayı yenileyip tekrar deneyin.',
+            'Connection could not be established. Please refresh the page and try again.'
+          ));
+          setState(SESSION_STATES.ERROR);
+        } else {
+          setState(SESSION_STATES.IDLE);
+        }
       }
     };
 
@@ -749,8 +801,11 @@ export function useGeminiLive() {
         return;
       }
       log.error('WebSocket error', { error: err });
-      setError('WebSocket bağlantı hatası');
-      setState(SESSION_STATES.ERROR);
+      // Hata mesajını sadece reconnect denemesi yoksa göster
+      if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+        setError('WebSocket bağlantı hatası');
+        setState(SESSION_STATES.ERROR);
+      }
     };
   }, [initPlayer, startMic]);
 
@@ -799,6 +854,13 @@ export function useGeminiLive() {
 
   const disconnect = useCallback(() => {
     completionLockedRef.current = false;
+    reconnectAttemptsRef.current = 0;
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    lastTokenRef.current = null;
+    lastOptionsRef.current = {};
     stopMic();
     clearAudioBuffer();
     if (playerNodeRef.current) {
@@ -831,15 +893,20 @@ export function useGeminiLive() {
     setCameraPresence(null);
   }, [stopMic, clearAudioBuffer]);
   
-  // Timer countdown efekti
+  // Timer countdown efekti — BUG-009 FIX: timerActiveRef ile race condition engelleniyor
   useEffect(() => {
     if (!timer || !timer.active) return;
     
     const interval = setInterval(() => {
+      if (!timerActiveRef.current) {
+        clearInterval(interval);
+        return;
+      }
       setTimer(prev => {
-        if (!prev || !prev.active) return prev;
+        if (!prev || !prev.active || !timerActiveRef.current) return prev;
         const newRemaining = prev.remaining - 1;
         if (newRemaining <= 0) {
+          timerActiveRef.current = false;
           return { ...prev, remaining: 0, active: false };
         }
         return { ...prev, remaining: newRemaining };

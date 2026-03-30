@@ -131,6 +131,14 @@ class BrainAgent {
     this.INACTIVITY_STOP_AFTER_MS = parsePositiveInt(process.env.TEST1_INACTIVITY_STOP_MS, 16000);
     this.MIN_AUTO_STOP_ELAPSED_MS = parsePositiveInt(process.env.TEST1_AUTO_STOP_MIN_ELAPSED_MS, 20000);
 
+    // BUG-010: Test 2 (Story Recall) inactivity timeout
+    this.storyRecallStartedAt = null;
+    this.storyRecallLastUserAt = null;
+    this.storyRecallWarningSent = false;
+    this.storyRecallInactivityInterval = null;
+    this.STORY_RECALL_WARN_MS = parsePositiveInt(process.env.TEST2_INACTIVITY_WARN_MS, 20000);
+    this.STORY_RECALL_TIMEOUT_MS = parsePositiveInt(process.env.TEST2_INACTIVITY_TIMEOUT_MS, 45000);
+
     this.agentBuffer = '';
     this.userBuffer = '';
     this.bufferResetTimeout = null;
@@ -150,6 +158,7 @@ class BrainAgent {
       this.agentBuffer += ` ${cleanText}`;
     } else {
       this.userBuffer += ` ${cleanText}`;
+      this._updateStoryRecallActivity();
       if (this.testPhase === 'ORIENTATION_ACTIVE') {
         this.orientationUserInputBuffer += ` ${cleanText}`;
         this.orientationLastUserAt = Date.now();
@@ -451,6 +460,7 @@ class BrainAgent {
     if (this.testPhase === 'VERBAL_FLUENCY_DONE' && this._containsAny(agentBuf, KEYWORDS.storyStart)) {
       log.info('Faz geçişi: VERBAL_FLUENCY_DONE → STORY_RECALL_ACTIVE', { sessionId: this.sessionId });
       this.testPhase = 'STORY_RECALL_ACTIVE';
+      this._startStoryRecallWatcher();
     }
 
     if (this._containsAny(agentBuf, KEYWORDS.visualStart) || this._containsAny(text, KEYWORDS.visualStart)) {
@@ -514,9 +524,79 @@ class BrainAgent {
     }
   }
 
+  // BUG-010: Test 2 (Story Recall) inactivity watcher
+  _startStoryRecallWatcher() {
+    this._stopStoryRecallWatcher();
+    this.storyRecallStartedAt = Date.now();
+    this.storyRecallLastUserAt = null;
+    this.storyRecallWarningSent = false;
+
+    this.storyRecallInactivityInterval = setInterval(() => {
+      this._checkStoryRecallInactivity();
+    }, 2000);
+
+    log.info('Story Recall inactivity watcher başlatıldı', { sessionId: this.sessionId });
+  }
+
+  _stopStoryRecallWatcher() {
+    if (this.storyRecallInactivityInterval) {
+      clearInterval(this.storyRecallInactivityInterval);
+      this.storyRecallInactivityInterval = null;
+    }
+  }
+
+  _checkStoryRecallInactivity() {
+    if (this.testPhase !== 'STORY_RECALL_ACTIVE') {
+      this._stopStoryRecallWatcher();
+      return;
+    }
+
+    const now = Date.now();
+    const referenceTime = this.storyRecallLastUserAt || this.storyRecallStartedAt;
+    if (!referenceTime) return;
+
+    const silenceMs = now - referenceTime;
+
+    if (!this.storyRecallWarningSent && silenceMs >= this.STORY_RECALL_WARN_MS) {
+      this.storyRecallWarningSent = true;
+      this.sendTextToLive(
+        pickText(
+          this.language,
+          'STORY_RECALL_HINT: Kullanici bir suredir sessiz. Hikaye hatirlama testi devam ediyor. Kullaniciyi nazikce tesvik et: "Hatirladiginiz kadarini anlatabilirsiniz, eksik olsa da sorun degil."',
+          'STORY_RECALL_HINT: The user has been silent for a while. Story recall test is still active. Gently encourage: "You can tell as much as you remember, it is okay if it is incomplete."'
+        )
+      );
+      return;
+    }
+
+    if (silenceMs >= this.STORY_RECALL_TIMEOUT_MS) {
+      log.info('Story Recall timeout - kullanıcı uzun süre sessiz', {
+        sessionId: this.sessionId,
+        silenceMs,
+      });
+      this._stopStoryRecallWatcher();
+      this.sendTextToLive(
+        pickText(
+          this.language,
+          'STORY_RECALL_TIMEOUT: Kullanici uzun suredir sessiz. Hikaye hatirlama testini mevcut bilgiyle tamamla. Eger kullanici hicbir sey soylemediyse bos cevap olarak submit_story_recall cagir. Sonra Test 3e gec.',
+          'STORY_RECALL_TIMEOUT: The user has been silent for too long. Complete the story recall test with available info. If user said nothing, call submit_story_recall with empty response. Then move to Test 3.'
+        )
+      );
+    }
+  }
+
+  // Story Recall fazında kullanıcı konuştuğunda son konuşma zamanını güncelle
+  _updateStoryRecallActivity() {
+    if (this.testPhase === 'STORY_RECALL_ACTIVE') {
+      this.storyRecallLastUserAt = Date.now();
+      this.storyRecallWarningSent = false;
+    }
+  }
+
   destroy() {
     if (this.timerTimeout) clearTimeout(this.timerTimeout);
     this._stopInactivityWatcher();
+    this._stopStoryRecallWatcher();
     if (this.bufferResetTimeout) clearTimeout(this.bufferResetTimeout);
     this.visualTestAgent = null;
     this.videoAnalysisAgent = null;

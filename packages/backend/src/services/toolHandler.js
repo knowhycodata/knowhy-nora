@@ -16,10 +16,12 @@ const { scoreStoryRecall } = require('./scoring/storyRecall');
 const { scoreVisualRecognition } = require('./scoring/visualRecognition');
 const { generateStory } = require('./storyGenerator');
 const { scoreOrientation } = require('./scoring/orientation');
+const { scoreVideoAnalysis } = require('./scoring/videoAnalysis');
 const { getImagePipeline } = require('./imageGenerator');
 const { getStaticTestImage } = require('./staticTestImages');
 const { VideoAnalysisAgent } = require('./videoAnalysisAgent');
 const { DateTimeAgent } = require('./dateTimeAgent');
+const { consumePrefetchedStory } = require('./storyPrefetchAgent');
 
 // Visual Test Agent referansları (session bazlı)
 const visualTestAgents = new Map(); // sessionId -> VisualTestAgent
@@ -39,12 +41,18 @@ const dateTimeAgents = new Map(); // sessionId -> DateTimeAgent
 // Session dil tercihleri (session bazlı)
 const sessionLanguages = new Map(); // sessionId -> 'tr' | 'en'
 
+// Orientation guard state (session bazlı)
+const orientationGuardStates = new Map(); // sessionId -> { blockedCount, lastRepromptAt, lastQuestionType }
+const ORIENTATION_GUARD_REPROMPT_COOLDOWN_MS = 5000;
+const ORIENTATION_GUARD_FALLBACK_THRESHOLD = 3;
+
 function registerSessionLanguage(sessionId, language) {
   sessionLanguages.set(sessionId, normalizeLanguage(language));
 }
 
 function unregisterSessionLanguage(sessionId) {
   sessionLanguages.delete(sessionId);
+  orientationGuardStates.delete(sessionId);
 }
 
 function getSessionLanguage(sessionId) {
@@ -210,12 +218,34 @@ async function handleVerbalFluency({ sessionId, words, targetLetter, durationSec
     };
   }
 
-  const result = scoreVerbalFluency(words, targetLetter, durationSeconds, language);
+  // BUG-012 FIX: LLM halüsinasyonunu engelle.
+  // BrainAgent'ın transkriptten topladığı gerçek kelimeleri öncelikli kaynak olarak kullan.
+  // LLM'in gönderdiği words listesini yalnızca BrainAgent yoksa veya boşsa fallback olarak al.
+  let trustedWords = words;
+  let trustedLetter = targetLetter;
+  let wordSource = 'llm';
+
+  if (brainAgent) {
+    if (brainAgent.collectedWords && brainAgent.collectedWords.length > 0) {
+      trustedWords = [...brainAgent.collectedWords];
+      wordSource = 'brain_agent';
+      log.info('submit_verbal_fluency: BrainAgent kelimeleri kullanılıyor', {
+        sessionId,
+        brainAgentCount: trustedWords.length,
+        llmCount: words?.length || 0,
+      });
+    }
+    if (brainAgent.targetLetter) {
+      trustedLetter = brainAgent.targetLetter;
+    }
+  }
+
+  const result = scoreVerbalFluency(trustedWords, trustedLetter, durationSeconds, language);
 
   await prisma.testResult.upsert({
     where: { sessionId_testType: { sessionId, testType: 'VERBAL_FLUENCY' } },
     update: {
-      rawData: { words, targetLetter, durationSeconds },
+      rawData: { words: trustedWords, targetLetter: trustedLetter, durationSeconds, wordSource },
       score: result.score,
       maxScore: result.maxScore,
       details: result,
@@ -223,7 +253,7 @@ async function handleVerbalFluency({ sessionId, words, targetLetter, durationSec
     create: {
       sessionId,
       testType: 'VERBAL_FLUENCY',
-      rawData: { words, targetLetter, durationSeconds },
+      rawData: { words: trustedWords, targetLetter: trustedLetter, durationSeconds, wordSource },
       score: result.score,
       maxScore: result.maxScore,
       details: result,
@@ -278,6 +308,31 @@ async function handleStoryRecall({ sessionId, originalStory, recalledStory }) {
 async function handleGenerateStory({ sessionId }) {
   const language = getSessionLanguage(sessionId);
   log.info('Hikaye üretimi istendi', { sessionId });
+
+  const prefetched = consumePrefetchedStory(sessionId);
+  if (prefetched) {
+    log.info('Ön-üretilmiş hikaye kullanılıyor (sıfır bekleme)', {
+      sessionId,
+      source: prefetched.source,
+      model: prefetched.model,
+      storyLength: prefetched.story.length,
+    });
+
+    return {
+      success: true,
+      story: prefetched.story,
+      source: prefetched.source,
+      model: prefetched.model || null,
+      message: pickText(
+        language,
+        `Hikaye ön-üretim ile hazırlandı. Bu hikayeyi kullanıcıya anlat. Kullanıcı tekrar anlattıktan sonra submit_story_recall çağırırken originalStory olarak bu hikayeyi gönder.`,
+        `A story was pre-generated for this session. Tell this exact story to the user. After the user repeats it, call submit_story_recall and send this story in originalStory.`
+      ),
+    };
+  }
+
+  // Cache boşsa normal akışa devam et (prefetch başarısız olmuş veya henüz tamamlanmamış)
+  log.info('Prefetch cache boş, normal hikaye üretimi yapılıyor', { sessionId });
 
   try {
     const result = await generateStory(language);
@@ -495,6 +550,35 @@ async function handleStopVideoAnalysis({ sessionId }) {
   const presenceAgent = cameraPresenceAgents.get(sessionId);
   const presenceSummary = presenceAgent ? presenceAgent.stopMonitoring() : null;
 
+  // Sorun 1 FIX: Video analiz sonuçlarını skorla ve DB'ye kaydet
+  const videoScore = scoreVideoAnalysis(result.summary);
+  try {
+    await prisma.testResult.upsert({
+      where: { sessionId_testType: { sessionId, testType: 'VIDEO_ANALYSIS' } },
+      update: {
+        rawData: { analyses: result.analyses, presenceSummary },
+        score: videoScore.score,
+        maxScore: videoScore.maxScore,
+        details: videoScore.details,
+      },
+      create: {
+        sessionId,
+        testType: 'VIDEO_ANALYSIS',
+        rawData: { analyses: result.analyses, presenceSummary },
+        score: videoScore.score,
+        maxScore: videoScore.maxScore,
+        details: videoScore.details,
+      },
+    });
+    log.info('Video analiz skoru kaydedildi', {
+      sessionId,
+      score: videoScore.score,
+      maxScore: videoScore.maxScore,
+    });
+  } catch (dbErr) {
+    log.error('Video analiz DB kayıt hatası', { sessionId, error: dbErr.message });
+  }
+
   return {
     success: true,
     message: pickText(
@@ -503,6 +587,7 @@ async function handleStopVideoAnalysis({ sessionId }) {
       `Video analysis completed. ${result.totalAnalyses} frames were analyzed.`
     ),
     summary: result.summary,
+    videoScore: { score: videoScore.score, maxScore: videoScore.maxScore },
     presenceSummary,
   };
 }
@@ -560,36 +645,86 @@ async function handleVerifyOrientationAnswer({ sessionId, questionType, userAnsw
   // LLM'in kendi basina cevap uydurmasini engellemek icin gercek user transkriptini zorunlu kil.
   const brainAgent = brainAgents.get(sessionId);
   let effectiveUserAnswer = userAnswer;
+  const guardState = orientationGuardStates.get(sessionId) || {
+    blockedCount: 0,
+    lastRepromptAt: 0,
+    lastQuestionType: null,
+  };
+
+  if (guardState.lastQuestionType !== questionType) {
+    guardState.blockedCount = 0;
+  }
+  guardState.lastQuestionType = questionType;
+  orientationGuardStates.set(sessionId, guardState);
 
   if (brainAgent && typeof brainAgent.consumeOrientationUserInput === 'function') {
     const realUserInput = brainAgent.consumeOrientationUserInput(15000);
     if (!realUserInput) {
-      log.warn('verify_orientation_answer engellendi - taze user cevabi yok', {
-        sessionId,
-        questionType,
-      });
-      if (typeof brainAgent.sendTextToLive === 'function') {
-        brainAgent.sendTextToLive(
-          pickText(
+      guardState.blockedCount += 1;
+      orientationGuardStates.set(sessionId, guardState);
+
+      const modelProvidedAnswer =
+        typeof userAnswer === 'string'
+          ? userAnswer.trim()
+          : '';
+      const hasModelProvidedAnswer = modelProvidedAnswer.length >= 2;
+      const canUseFallbackAnswer =
+        hasModelProvidedAnswer && guardState.blockedCount >= ORIENTATION_GUARD_FALLBACK_THRESHOLD;
+
+      if (canUseFallbackAnswer) {
+        effectiveUserAnswer = modelProvidedAnswer;
+        log.warn('verify_orientation_answer fallback userAnswer kullanildi', {
+          sessionId,
+          questionType,
+          blockedCount: guardState.blockedCount,
+          userAnswer: modelProvidedAnswer,
+        });
+        guardState.blockedCount = 0;
+        guardState.lastRepromptAt = 0;
+        orientationGuardStates.set(sessionId, guardState);
+      } else {
+        log.warn('verify_orientation_answer engellendi - taze user cevabi yok', {
+          sessionId,
+          questionType,
+          blockedCount: guardState.blockedCount,
+        });
+
+        const now = Date.now();
+        const shouldReprompt =
+          now - guardState.lastRepromptAt >= ORIENTATION_GUARD_REPROMPT_COOLDOWN_MS;
+
+        if (shouldReprompt && typeof brainAgent.sendTextToLive === 'function') {
+          brainAgent.sendTextToLive(
+            pickText(
+              language,
+              'ORIENTATION_GUARD: Henüz net cevap yok. Soruyu en fazla bir kez tekrar et ve sonra sessizce kullanıcı cevabını bekle. Yeni cevap almadan verify_orientation_answer çağırma.',
+              'ORIENTATION_GUARD: No clear user answer yet. Repeat the question at most once, then wait silently for the user response. Do not call verify_orientation_answer until a new user answer arrives.'
+            )
+          );
+          guardState.lastRepromptAt = now;
+          orientationGuardStates.set(sessionId, guardState);
+        }
+
+        return {
+          success: false,
+          blocked: true,
+          reason: 'NO_FRESH_USER_ANSWER',
+          questionType,
+          retryAfterMs: 2000,
+          blockedCount: guardState.blockedCount,
+          message: pickText(
             language,
-            'ORIENTATION_GUARD: Henüz kullanıcıdan cevap gelmedi. Soruyu tekrar sor, sonra kullanıcı cevabını bekle. Cevap almadan verify_orientation_answer çağırma.',
-            'ORIENTATION_GUARD: There is no fresh user answer yet. Ask the question again, then wait for the user response. Do not call verify_orientation_answer without a user answer.'
-          )
-        );
+            'Henüz kullanıcıdan net bir cevap alınmadı. Soruyu bir kez tekrar sorup bekleyin.',
+            'No clear user answer has been received yet. Repeat the question once and wait.'
+          ),
+        };
       }
-      return {
-        success: false,
-        blocked: true,
-        reason: 'NO_FRESH_USER_ANSWER',
-        questionType,
-        message: pickText(
-          language,
-          'Henüz kullanıcıdan net bir cevap alınmadı. Soruyu tekrar sor ve kullanıcının cevabını bekle.',
-          'No clear user answer has been received yet. Ask the question again and wait for the user response.'
-        ),
-      };
+    } else {
+      effectiveUserAnswer = realUserInput;
+      guardState.blockedCount = 0;
+      guardState.lastRepromptAt = 0;
+      orientationGuardStates.set(sessionId, guardState);
     }
-    effectiveUserAnswer = realUserInput;
   }
 
   const verification = agent.verifyOrientationAnswer(questionType, effectiveUserAnswer, context || {});
@@ -616,9 +751,19 @@ async function handleCompleteSession({ sessionId }) {
     where: { sessionId },
   });
 
-  const totalScore = testResults.reduce((sum, t) => sum + t.score, 0);
-  const maxPossible = testResults.reduce((sum, t) => sum + t.maxScore, 0);
-  const percentage = maxPossible > 0 ? (totalScore / maxPossible) * 100 : 0;
+  // Sorun 3 FIX: Normalize edilmiş ortalama — her test eşit ağırlıkta
+  // Her testin yüzdesini hesapla, sonra ortalama al (farklı maxScore'lar adaletli tartılır)
+  const rawTotal = testResults.reduce((sum, t) => sum + t.score, 0);
+  const rawMax = testResults.reduce((sum, t) => sum + t.maxScore, 0);
+
+  const percentage = testResults.length > 0
+    ? testResults.reduce((sum, t) => {
+        return sum + (t.maxScore > 0 ? (t.score / t.maxScore) * 100 : 0);
+      }, 0) / testResults.length
+    : 0;
+
+  // totalScore: 100 üzerinden normalize edilmiş puan (Results sayfası bunu gösteriyor)
+  const totalScore = Math.round(percentage * 100) / 100;
 
   let riskLevel = 'LOW';
   if (percentage < 50) riskLevel = 'HIGH';
@@ -637,13 +782,15 @@ async function handleCompleteSession({ sessionId }) {
   return {
     success: true,
     totalScore,
-    maxPossible,
+    rawTotal,
+    rawMax,
     percentage: Math.round(percentage),
     riskLevel,
+    testCount: testResults.length,
     message: pickText(
       language,
-      `Oturum tamamlandı. Toplam puan: ${totalScore}/${maxPossible}`,
-      `Session completed. Total score: ${totalScore}/${maxPossible}`
+      `Oturum tamamlandı. Genel başarı: %${Math.round(percentage)}`,
+      `Session completed. Overall score: ${Math.round(percentage)}%`
     ),
   };
 }

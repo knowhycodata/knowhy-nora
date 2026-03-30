@@ -36,6 +36,18 @@ else
     exit 1
 fi
 
+# Proje ID kontrolü
+CURRENT_PROJECT=$(gcloud config get-value project 2>/dev/null)
+if [ "$CURRENT_PROJECT" != "$PROJECT_ID" ]; then
+    echo -e "${YELLOW}Mevcut proje: ${CURRENT_PROJECT}${NC}"
+    echo -e "${YELLOW}Hedef proje: ${PROJECT_ID}${NC}"
+    echo -e "${CYAN}Proje değiştiriliyor...${NC}"
+    gcloud config set project "$PROJECT_ID" > /dev/null 2>&1
+    echo -e "${GREEN}✓ Proje ayarlandı: ${PROJECT_ID}${NC}"
+else
+    echo -e "${GREEN}✓ Doğru proje aktif: ${PROJECT_ID}${NC}"
+fi
+
 # Backend Build
 echo ""
 echo -e "${YELLOW}[2/7] Backend Docker build alınıyor...${NC}"

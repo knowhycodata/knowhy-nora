@@ -42,6 +42,7 @@ export default function AgentSession() {
   const { t, language } = useLanguage();
   const gemini = useGeminiLive();
   const [showTranscript, setShowTranscript] = useState(false);
+  const [showEndConfirm, setShowEndConfirm] = useState(false);
   const hasStarted = useRef(false);
 
   const TEST_STEPS = [
@@ -75,9 +76,36 @@ export default function AgentSession() {
   }, [gemini.state, gemini.sessionId, navigate]);
 
   const handleEnd = useCallback(() => {
+    setShowEndConfirm(true);
+  }, []);
+
+  const confirmEnd = useCallback(() => {
+    setShowEndConfirm(false);
     gemini.endSession();
     navigate('/dashboard');
   }, [gemini, navigate]);
+
+  const cancelEnd = useCallback(() => {
+    setShowEndConfirm(false);
+  }, []);
+
+  // BUG-008 FIX: Sayfa yenilendiğinde veya kapatıldığında uyarı göster
+  useEffect(() => {
+    const isSessionActive = [
+      SESSION_STATES.ACTIVE, SESSION_STATES.LISTENING, SESSION_STATES.SPEAKING,
+      SESSION_STATES.PROCESSING, SESSION_STATES.READY,
+    ].includes(gemini.state);
+
+    if (!isSessionActive) return;
+
+    const handleBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [gemini.state]);
 
   const isConnecting = [SESSION_STATES.IDLE, SESSION_STATES.CONNECTING, SESSION_STATES.AUTHENTICATING].includes(gemini.state);
   const isActive = [SESSION_STATES.ACTIVE, SESSION_STATES.LISTENING, SESSION_STATES.SPEAKING, SESSION_STATES.PROCESSING, SESSION_STATES.READY].includes(gemini.state);
@@ -386,6 +414,36 @@ export default function AgentSession() {
         presenceAlert={gemini.cameraPresence}
         onClose={null}
       />
+
+      {/* ─── BUG-005: Bitir Onay Modalı ─── */}
+      {showEndConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6 max-w-sm mx-4 w-full">
+            <div className="flex items-center justify-center w-12 h-12 rounded-full bg-red-50 mx-auto mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+            </div>
+            <h3 className="text-base font-semibold text-gray-900 text-center">{t('agentSession.endConfirmTitle')}</h3>
+            <p className="mt-2 text-sm text-gray-500 text-center">{t('agentSession.endConfirmMessage')}</p>
+            <div className="mt-5 flex items-center gap-3">
+              <button
+                onClick={cancelEnd}
+                className="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition"
+              >
+                {t('agentSession.endConfirmCancel')}
+              </button>
+              <button
+                onClick={confirmEnd}
+                className="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-red-600 hover:bg-red-700 transition"
+              >
+                {t('agentSession.endConfirmOk')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

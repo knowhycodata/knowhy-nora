@@ -1,6 +1,7 @@
 const express = require('express');
 const prisma = require('../lib/prisma');
 const { authenticate } = require('../middleware/auth');
+const { generatePdfReport } = require('../services/pdfGenerator');
 
 const router = express.Router();
 
@@ -91,6 +92,41 @@ router.patch('/:id/complete', authenticate, async (req, res) => {
   } catch (err) {
     console.error('Complete session error:', err);
     res.status(500).json({ error: 'Oturum tamamlanırken hata oluştu' });
+  }
+});
+
+// PDF raporu indir
+router.get('/:id/pdf', authenticate, async (req, res) => {
+  try {
+    const session = await prisma.testSession.findFirst({
+      where: { id: req.params.id, userId: req.userId },
+      include: { tests: true },
+    });
+
+    if (!session) {
+      return res.status(404).json({ error: 'Oturum bulunamadı' });
+    }
+
+    if (session.status !== 'COMPLETED') {
+      return res.status(400).json({ error: 'Sadece tamamlanmış oturumlar için rapor indirilebilir' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: req.userId } });
+    if (!user) {
+      return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
+    }
+
+    const language = req.query.lang || 'tr';
+    const pdfBuffer = await generatePdfReport(session, user, language);
+
+    const filename = `nora-report-${session.id.substring(0, 8)}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
+  } catch (err) {
+    console.error('PDF generation error:', err);
+    res.status(500).json({ error: 'PDF raporu oluşturulurken hata oluştu' });
   }
 });
 
