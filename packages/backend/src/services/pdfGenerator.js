@@ -6,8 +6,13 @@
  */
 
 const PDFDocument = require('pdfkit');
+const path = require('path');
 const { createLogger } = require('../lib/logger');
 const { normalizeLanguage, isEnglish } = require('../lib/language');
+
+const FONTS_DIR = path.join(__dirname, '..', 'assets', 'fonts');
+const FONT_REGULAR = path.join(FONTS_DIR, 'NotoSans-Regular.ttf');
+const FONT_BOLD = path.join(FONTS_DIR, 'NotoSans-Bold.ttf');
 
 const log = createLogger('PDFGenerator');
 
@@ -113,10 +118,14 @@ async function generatePdfReport(session, user, language = 'tr') {
         reject(err);
       });
 
+      // ── Font kayıt ──
+      doc.registerFont('NotoSans', FONT_REGULAR);
+      doc.registerFont('NotoSans-Bold', FONT_BOLD);
+
       // ── Header ──
-      doc.fontSize(24).font('Helvetica-Bold').fillColor('#111827')
+      doc.fontSize(24).font('NotoSans-Bold').fillColor('#111827')
         .text(t.title, { align: 'center' });
-      doc.fontSize(11).font('Helvetica').fillColor('#6B7280')
+      doc.fontSize(11).font('NotoSans').fillColor('#6B7280')
         .text(t.subtitle, { align: 'center' });
       doc.moveDown(0.5);
 
@@ -126,14 +135,14 @@ async function generatePdfReport(session, user, language = 'tr') {
 
       // ── Katılımcı Bilgileri ──
       const infoY = doc.y;
-      doc.fontSize(10).font('Helvetica').fillColor('#9CA3AF')
+      doc.fontSize(10).font('NotoSans').fillColor('#9CA3AF')
         .text(`${t.patient}:`, 50, infoY);
-      doc.fontSize(12).font('Helvetica-Bold').fillColor('#111827')
+      doc.fontSize(12).font('NotoSans-Bold').fillColor('#111827')
         .text(user.name, 50, infoY + 14);
 
-      doc.fontSize(10).font('Helvetica').fillColor('#9CA3AF')
+      doc.fontSize(10).font('NotoSans').fillColor('#9CA3AF')
         .text(`${t.date}:`, 300, infoY);
-      doc.fontSize(12).font('Helvetica-Bold').fillColor('#111827')
+      doc.fontSize(12).font('NotoSans-Bold').fillColor('#111827')
         .text(formatDateForPdf(session.startedAt, lang), 300, infoY + 14);
 
       doc.moveDown(2.5);
@@ -143,10 +152,10 @@ async function generatePdfReport(session, user, language = 'tr') {
       doc.roundedRect(50, boxY, 495, 80, 8).fillAndStroke('#F9FAFB', '#E5E7EB');
 
       // Toplam puan
-      doc.fontSize(10).font('Helvetica').fillColor('#9CA3AF')
+      doc.fontSize(10).font('NotoSans').fillColor('#9CA3AF')
         .text(t.totalScore, 70, boxY + 15);
       const scoreText = session.totalScore !== null ? Math.round(session.totalScore).toString() : '—';
-      doc.fontSize(32).font('Helvetica-Bold').fillColor('#111827')
+      doc.fontSize(32).font('NotoSans-Bold').fillColor('#111827')
         .text(scoreText, 70, boxY + 32);
 
       // Risk seviyesi
@@ -155,22 +164,22 @@ async function generatePdfReport(session, user, language = 'tr') {
         const riskColors = { LOW: '#059669', MODERATE: '#D97706', HIGH: '#DC2626' };
         const riskColor = riskColors[session.riskLevel] || '#6B7280';
 
-        doc.fontSize(10).font('Helvetica').fillColor('#9CA3AF')
+        doc.fontSize(10).font('NotoSans').fillColor('#9CA3AF')
           .text(t.riskLevel, 350, boxY + 15);
-        doc.fontSize(18).font('Helvetica-Bold').fillColor(riskColor)
+        doc.fontSize(18).font('NotoSans-Bold').fillColor(riskColor)
           .text(riskLabel, 350, boxY + 35);
       }
 
       doc.y = boxY + 100;
 
       // ── Test Detayları ──
-      doc.fontSize(14).font('Helvetica-Bold').fillColor('#111827')
+      doc.fontSize(14).font('NotoSans-Bold').fillColor('#111827')
         .text(t.testDetails, 50, doc.y);
       doc.moveDown(0.8);
 
       const tests = session.tests || [];
       if (tests.length === 0) {
-        doc.fontSize(11).font('Helvetica').fillColor('#9CA3AF')
+        doc.fontSize(11).font('NotoSans').fillColor('#9CA3AF')
           .text(t.noTests);
       } else {
         // Tablo başlıkları
@@ -178,7 +187,7 @@ async function generatePdfReport(session, user, language = 'tr') {
         const colWidths = [180, 80, 80, 100];
         const headerY = doc.y;
 
-        doc.fontSize(9).font('Helvetica-Bold').fillColor('#6B7280');
+        doc.fontSize(9).font('NotoSans-Bold').fillColor('#6B7280');
         doc.text('Test', tableX, headerY);
         doc.text(t.score, tableX + colWidths[0], headerY);
         doc.text(t.maxScore, tableX + colWidths[0] + colWidths[1], headerY);
@@ -194,12 +203,12 @@ async function generatePdfReport(session, user, language = 'tr') {
           const pct = test.maxScore > 0 ? Math.round((test.score / test.maxScore) * 100) : 0;
           const pctColor = pct >= 75 ? '#059669' : pct >= 50 ? '#D97706' : '#DC2626';
 
-          doc.fontSize(11).font('Helvetica-Bold').fillColor('#111827')
+          doc.fontSize(11).font('NotoSans-Bold').fillColor('#111827')
             .text(testName, tableX, rowY, { width: colWidths[0] - 10 });
-          doc.fontSize(11).font('Helvetica').fillColor('#374151')
+          doc.fontSize(11).font('NotoSans').fillColor('#374151')
             .text(Math.round(test.score).toString(), tableX + colWidths[0], rowY);
           doc.text(test.maxScore.toString(), tableX + colWidths[0] + colWidths[1], rowY);
-          doc.font('Helvetica-Bold').fillColor(pctColor)
+          doc.font('NotoSans-Bold').fillColor(pctColor)
             .text(`%${pct}`, tableX + colWidths[0] + colWidths[1] + colWidths[2], rowY);
 
           doc.moveDown(0.8);
@@ -222,12 +231,12 @@ async function generatePdfReport(session, user, language = 'tr') {
       doc.moveDown(1.5);
       const disclaimerY = doc.y;
       doc.roundedRect(50, disclaimerY, 495, 60, 6).fillAndStroke('#FEF3C7', '#FDE68A');
-      doc.fontSize(8).font('Helvetica-Bold').fillColor('#92400E')
+      doc.fontSize(8).font('NotoSans-Bold').fillColor('#92400E')
         .text(t.disclaimer, 65, disclaimerY + 12, { width: 465, lineGap: 3 });
 
       // ── Footer ──
       doc.moveDown(2);
-      doc.fontSize(8).font('Helvetica').fillColor('#9CA3AF')
+      doc.fontSize(8).font('NotoSans').fillColor('#9CA3AF')
         .text(t.generatedBy, { align: 'center' });
       doc.text(`Session ID: ${session.id}`, { align: 'center' });
 

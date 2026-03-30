@@ -1,6 +1,6 @@
 # Nöra - Cognitive Screening AI Assistant
 
-> **Gemini Hackathon 2026 - Live Agents Category**
+> ** - Live Agents Category**
 >
 > Real-time voice-visual interactive pre-screening AI agent for Alzheimer's and cognitive decline risk.
 
@@ -9,16 +9,14 @@
 ---
 
 <a name="english"></a>
-
+  
 ## 📋 Competition Submission Links
 
 | Submission | URL |
 |---|---|
-| **Public Repository** | https://github.com/knowhycodata/knowhy_gemini_live_agent_challange |
+| **Public Repository** | https://github.com/knowhycodata/knowhy-nora |
 | **Live Demo** | https://nora-frontend-806414321712.us-central1.run.app |
-| **Backend API** | https://nora-backend-806414321712.us-central1.run.app |
 | **Demo Video** | *https://youtu.be/gtv1Bgd5Exc* | English Dubbed: https://youtu.be/m4iG0bB2zdI
-| **GCP Proof Video** | https://www.youtube.com/watch?v=10j1kAk4QTk | TURN ON SUBTITLES FOR ENGLISH.
 
 ---
 
@@ -35,7 +33,7 @@
 | 5 | At least one GCP service | ✅ | Cloud Run, Cloud SQL, Secret Manager |
 | 6 | README spin-up instructions | ✅ | See "Quick Start" section below |
 | 7 | Architecture Diagram | ✅ | See "Architecture" section below |
-| 8 | Public Code Repository | ✅ | [GitHub Link](https://github.com/knowhycodata/knowhy_gemini_live_agent_challange) |
+| 8 | Public Code Repository | ✅ | [GitHub Link](https://github.com/knowhycodata/knowhy-nora) |
 
 ### Bonus Requirements
 
@@ -380,7 +378,7 @@ gcloud run services update nora-backend --region $REGION --update-env-vars "FRON
 
 ## 📄 License
 
-This project was developed for **Gemini Hackathon 2026**.
+This project was developed for ****.
 
 ---
 
@@ -390,7 +388,7 @@ This project was developed for **Gemini Hackathon 2026**.
 
 # Nöra - Bilişsel Tarama AI Asistanı
 
-> **Gemini Hackathon 2026 - Live Agents Kategorisi**
+> ** - Live Agents Kategorisi**
 >
 > Alzheimer ve bilişsel bozulma riski için gerçek zamanlı sesli-görsel etkileşimli ön tarama AI ajanı.
 
@@ -400,11 +398,9 @@ This project was developed for **Gemini Hackathon 2026**.
 
 | Teslim | URL |
 |---|---|
-| **Public Repository** | https://github.com/knowhycodata/knowhy_gemini_live_agent_challange |
+| **Public Repository** | https://github.com/knowhycodata/knowhy-nora |
 | **Live Demo** | https://nora-frontend-806414321712.us-central1.run.app |
-| **Backend API** | https://nora-backend-806414321712.us-central1.run.app |
 | **Demo Video (<4 dk)** | **https://youtu.be/gtv1Bgd5Exc* | İngilizce Dublaj: https://youtu.be/m4iG0bB2zdI
-| **GCP Proof Video** | https://www.youtube.com/watch?v=10j1kAk4QTk |
 
 ---
 
@@ -421,7 +417,7 @@ This project was developed for **Gemini Hackathon 2026**.
 | 5 | En az bir GCP servisi | ✅ | Cloud Run, Cloud SQL, Secret Manager |
 | 6 | README spin-up instructions | ✅ | Aşağıda "Hızlı Başlangıç" bölümü |
 | 7 | Architecture Diagram | ✅ | Aşağıda "Architecture" bölümü |
-| 8 | Public Code Repository | ✅ | [GitHub Link](https://github.com/knowhycodata/knowhy_gemini_live_agent_challange) |
+| 8 | Public Code Repository | ✅ | [GitHub Link](https://github.com/knowhycodata/knowhy-nora) |
 
 ### Bonus Gereksinimler
 
@@ -766,4 +762,4 @@ gcloud run services update nora-backend --region $REGION --update-env-vars "FRON
 
 ## 📄 Lisans
 
-Bu proje **Gemini Hackathon 2026** için geliştirilmiştir.
+Bu proje **** için geliştirilmiştir.

@@ -24,7 +24,6 @@ export default function Session() {
   const {
     state,
     sessionId: liveSessionId,
-    transcripts,
     currentTest,
     generatedImage,
     imageGenerating,
@@ -57,9 +56,14 @@ export default function Session() {
   useEffect(() => {
     api.get(`/sessions/${id}`)
       .then((res) => {
-        setSession(res.data.session);
-        if (res.data.session.status === 'COMPLETED') {
+        const s = res.data.session;
+        setSession(s);
+        if (s.status === 'COMPLETED') {
           navigate(`/results/${id}`);
+        } else if (s.status === 'CANCELLED') {
+          // FIX: İptal edilmiş session'a erişim engelle
+          alert('Bu tarama oturumu iptal edilmiş. Yeni bir tarama başlatmanız gerekiyor.');
+          navigate('/dashboard');
         }
       })
       .catch(() => navigate('/dashboard'))
@@ -227,31 +231,6 @@ export default function Session() {
                 <Mic className="w-4 h-4 text-green-500" />
                 <span className="text-xs text-green-600 font-medium">Dinliyorum...</span>
               </div>
-            )}
-          </div>
-
-          {/* Transkript Alanı */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-6 mb-8 min-h-[120px] max-h-[200px] overflow-y-auto text-left">
-            {transcripts.length > 0 ? (
-              <div className="space-y-2">
-                {transcripts.map((t, idx) => (
-                  <p
-                    key={idx}
-                    className={`text-sm leading-relaxed ${
-                      t.role === 'user' ? 'text-blue-700' : 'text-gray-700'
-                    }`}
-                  >
-                    <span className="font-medium">{t.role === 'user' ? 'Siz: ' : 'Nöra: '}</span>
-                    {t.text}
-                  </p>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-400 italic">
-                {!hasStarted
-                  ? 'Başla butonuna basarak taramayı başlatın...'
-                  : 'Nöra ile konuşmaya başlayın...'}
-              </p>
             )}
           </div>
 

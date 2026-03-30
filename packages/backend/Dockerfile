@@ -25,5 +25,5 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
 
 EXPOSE ${PORT}
 
-# Migration, seed ve başlatma
-CMD ["sh", "-c", "npx prisma migrate deploy && npx prisma db seed && node src/index.js"]
+# Migration, seed ve başlatma (migration/seed hatası durumunda server yine başlasın)
+CMD ["sh", "-c", "npx prisma migrate deploy || echo 'Migration skipped'; npx prisma db seed || echo 'Seed skipped'; node src/index.js"]

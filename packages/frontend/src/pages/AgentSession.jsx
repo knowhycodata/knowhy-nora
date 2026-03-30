@@ -8,7 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useGeminiLive, SESSION_STATES } from '../hooks/useGeminiLive';
 import { createLogger } from '../lib/logger';
-import TranscriptPanel from '../components/TranscriptPanel';
+import api from '../lib/api';
 import GeneratedImagePanel from '../components/GeneratedImagePanel';
 import CameraModal from '../components/CameraModal';
 
@@ -41,7 +41,6 @@ export default function AgentSession() {
   const { token } = useAuth();
   const { t, language } = useLanguage();
   const gemini = useGeminiLive();
-  const [showTranscript, setShowTranscript] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const hasStarted = useRef(false);
 
@@ -79,8 +78,16 @@ export default function AgentSession() {
     setShowEndConfirm(true);
   }, []);
 
-  const confirmEnd = useCallback(() => {
+  const confirmEnd = useCallback(async () => {
     setShowEndConfirm(false);
+    // Önce REST API ile DB'de CANCELLED yap
+    if (gemini.sessionId) {
+      try {
+        await api.patch(`/sessions/${gemini.sessionId}/cancel`);
+      } catch (e) {
+        console.error('Session cancel API hatası:', e);
+      }
+    }
     gemini.endSession();
     navigate('/dashboard');
   }, [gemini, navigate]);
@@ -146,15 +153,6 @@ export default function AgentSession() {
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowTranscript(!showTranscript)}
-            className="p-2.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all"
-            title={t('agentSession.transcript')}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
-          </button>
           <button
             onClick={handleEnd}
             className="px-4 py-2 rounded-lg text-sm text-gray-500 hover:text-red-500 hover:bg-red-50 transition-all"
@@ -387,14 +385,6 @@ export default function AgentSession() {
               : t('agentSession.sessionConnecting')}
         </span>
       </footer>
-
-      {/* ─── Transkript Paneli ─── */}
-      {showTranscript && (
-        <TranscriptPanel
-          transcripts={gemini.transcripts}
-          onClose={() => setShowTranscript(false)}
-        />
-      )}
 
       {/* ─── Görsel Tanıma Modal (Fullscreen Overlay) ─── */}
       {(gemini.generatedImage || gemini.imageGenerating) && (

@@ -227,7 +227,7 @@ class DateTimeAgent {
             'istanbul', 'ankara', 'izmir', 'bursa', 'antalya', 'adana', 'konya',
             'gaziantep', 'mersin', 'diyarbakir', 'kayseri', 'eskisehir', 'samsun',
             'denizli', 'sanliurfa', 'trabzon', 'malatya', 'erzurum', 'van',
-            'batman', 'elazig', 'manisa', 'balikesir', 'mugla', 'hatay','zürich','deutcland'
+            'batman', 'elazig', 'manisa', 'balikesir', 'mugla', 'hatay', 'zurich', 'deutschland',
             'london', 'new york', 'berlin', 'paris', 'tokyo', 'amsterdam',
           ];
           const fuzzyCity = normalizeForMatch(userAnswer);

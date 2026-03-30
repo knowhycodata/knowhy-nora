@@ -140,15 +140,28 @@ export default function Dashboard() {
                 return (
                   <button
                     key={session.id}
-                    onClick={() => {
+                    onClick={async () => {
                       if (session.status === 'COMPLETED') {
                         navigate(`/results/${session.id}`);
                         return;
                       }
-                      sessionStorage.setItem('session_language_confirmed', '1');
-                      navigate('/session');
+                      if (session.status === 'IN_PROGRESS') {
+                        // Yarım kalan session — iptal et, geri dönülemez
+                        try {
+                          await api.patch(`/sessions/${session.id}/cancel`);
+                        } catch (e) {
+                          console.error('Session iptal hatası:', e);
+                        }
+                        // Listeyi güncelle
+                        setSessions(prev => prev.map(s => s.id === session.id ? { ...s, status: 'CANCELLED' } : s));
+                        return;
+                      }
+                      // CANCELLED — sadece görüntüleme, aksiyon yok
                     }}
-                    className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100 hover:border-gray-200 transition text-left"
+                    className={`w-full flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100 transition text-left ${
+                      session.status === 'COMPLETED' ? 'hover:border-gray-200 cursor-pointer' : 
+                      session.status === 'IN_PROGRESS' ? 'hover:border-red-200 cursor-pointer' : 'opacity-60 cursor-default'
+                    }`}
                   >
                     <div>
                       <p className="text-sm text-gray-700">

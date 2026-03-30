@@ -94,7 +94,6 @@ export const SESSION_STATES = {
 export function useGeminiLive() {
   const [state, setState] = useState(SESSION_STATES.IDLE);
   const [sessionId, setSessionId] = useState(null);
-  const [transcripts, setTranscripts] = useState([]);
   const [currentTest, setCurrentTest] = useState(null);
   const [generatedImage, setGeneratedImage] = useState(null);
   const [imageGenerating, setImageGenerating] = useState(false);
@@ -327,34 +326,6 @@ export function useGeminiLive() {
     }
   }, [stopMic, clearAudioBuffer]);
 
-  // ─── Transcript helpers ─────────────────────────────────────────
-  const addTranscript = useCallback((role, text) => {
-    if (!text || text.trim() === '') return;
-    setTranscripts((prev) => {
-      const last = prev[prev.length - 1];
-      if (last && last.role === role && last.partial) {
-        const updated = [...prev];
-        updated[updated.length - 1] = { ...last, text: last.text + text, partial: true };
-        return updated;
-      }
-      const updated = [...prev];
-      if (updated.length > 0 && updated[updated.length - 1].partial) {
-        updated[updated.length - 1] = { ...updated[updated.length - 1], partial: false };
-      }
-      updated.push({ role, text, timestamp: Date.now(), partial: true });
-      return updated;
-    });
-  }, []);
-
-  const finalizeLastTranscript = useCallback(() => {
-    setTranscripts((prev) => {
-      if (prev.length === 0) return prev;
-      const updated = [...prev];
-      updated[updated.length - 1] = { ...updated[updated.length - 1], partial: false };
-      return updated;
-    });
-  }, []);
-
   // ─── WebSocket Message Handler (ref-safe) ───────────────────────
   const handleMessageRef = useRef(null);
   handleMessageRef.current = (message) => {
@@ -403,21 +374,18 @@ export function useGeminiLive() {
         break;
 
       case 'input_transcription':
-        addTranscript('user', message.text);
+        log.debug('User transcription', { text: message.text?.substring(0, 50) });
         break;
 
       case 'output_transcription':
-        // BUG-007 FIX: Ajan transcript'i audio'dan önce gelir.
-        // Kısa gecikme ile sesle senkronize gösterim sağlanır.
-        setTimeout(() => addTranscript('agent', message.text), 350);
+        log.debug('Agent transcription', { text: message.text?.substring(0, 50) });
         break;
 
       case 'text':
-        addTranscript('agent', message.text);
+        log.debug('Agent text', { text: message.text?.substring(0, 50) });
         break;
 
       case 'turn_complete':
-        finalizeLastTranscript();
         setIsSpeaking(false);
         if (!completionLockedRef.current) {
           setState(SESSION_STATES.LISTENING);
@@ -879,7 +847,6 @@ export function useGeminiLive() {
     }
     setState(SESSION_STATES.IDLE);
     setSessionId(null);
-    setTranscripts([]);
     setCurrentTest(null);
     setGeneratedImage(null);
     setImageGenerating(false);
@@ -927,7 +894,6 @@ export function useGeminiLive() {
   return {
     state,
     sessionId,
-    transcripts,
     currentTest,
     generatedImage,
     imageGenerating,

@@ -95,6 +95,37 @@ router.patch('/:id/complete', authenticate, async (req, res) => {
   }
 });
 
+// Oturumu iptal et (yarım kalan session'ları CANCELLED yap)
+router.patch('/:id/cancel', authenticate, async (req, res) => {
+  try {
+    const session = await prisma.testSession.findFirst({
+      where: { id: req.params.id, userId: req.userId },
+    });
+
+    if (!session) {
+      return res.status(404).json({ error: 'Oturum bulunamadı' });
+    }
+
+    if (session.status === 'COMPLETED') {
+      return res.status(400).json({ error: 'Tamamlanmış oturum iptal edilemez' });
+    }
+
+    if (session.status === 'CANCELLED') {
+      return res.json({ session }); // Zaten iptal edilmiş
+    }
+
+    const updatedSession = await prisma.testSession.update({
+      where: { id: session.id },
+      data: { status: 'CANCELLED', completedAt: new Date() },
+    });
+
+    res.json({ session: updatedSession });
+  } catch (err) {
+    console.error('Cancel session error:', err);
+    res.status(500).json({ error: 'Oturum iptal edilirken hata oluştu' });
+  }
+});
+
 // PDF raporu indir
 router.get('/:id/pdf', authenticate, async (req, res) => {
   try {

@@ -309,6 +309,13 @@ wss.on('connection', async (ws, req) => {
               clearPrefetchCache(testSessionId);
               geminiSession = null;
             }
+            // FIX: DB'de session durumunu CANCELLED olarak güncelle
+            prisma.testSession.update({
+              where: { id: testSessionId },
+              data: { status: 'CANCELLED', completedAt: new Date() },
+            }).catch(err => {
+              log.error('Session CANCELLED güncelleme hatası', { testSessionId, error: err.message });
+            });
             ws.send(JSON.stringify({ type: 'session_ended' }));
             break;
           }
@@ -348,6 +355,22 @@ wss.on('connection', async (ws, req) => {
       unregisterDateTimeAgent(testSessionId);
       unregisterSessionLanguage(testSessionId);
       clearPrefetchCache(testSessionId);
+    }
+    // FIX: WebSocket kapatıldığında DB'de session durumunu CANCELLED yap
+    // AMA sadece session IN_PROGRESS ise (COMPLETED olanları değiştirme)
+    if (testSessionId) {
+      prisma.testSession.findUnique({ where: { id: testSessionId }, select: { status: true } })
+        .then(session => {
+          if (session && session.status === 'IN_PROGRESS') {
+            return prisma.testSession.update({
+              where: { id: testSessionId },
+              data: { status: 'CANCELLED', completedAt: new Date() },
+            });
+          }
+        })
+        .catch(err => {
+          log.error('Session CANCELLED güncelleme hatası (ws.close)', { testSessionId, error: err.message });
+        });
     }
   });
 
