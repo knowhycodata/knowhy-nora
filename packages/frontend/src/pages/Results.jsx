@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import api from '../lib/api';
+import { getBlobApiErrorMessage } from '../lib/apiErrors';
 
 export default function Results() {
   const { id } = useParams();
@@ -11,9 +12,18 @@ export default function Results() {
   const [loading, setLoading] = useState(true);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState(null);
+  const isPdfReady = session?.status === 'COMPLETED';
+  const pdfPendingMessage = language === 'en'
+    ? 'PDF report is available only after the session is completed.'
+    : 'PDF raporu yalnızca oturum tamamlandıktan sonra indirilebilir.';
 
   const handlePdfDownload = useCallback(async () => {
     if (!id) return;
+    if (!isPdfReady) {
+      setPdfError(pdfPendingMessage);
+      return;
+    }
+
     setPdfLoading(true);
     setPdfError(null);
     try {
@@ -31,11 +41,11 @@ export default function Results() {
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error('PDF download error:', err);
-      setPdfError(t('results.pdfError') || 'PDF indirme hatası');
+      setPdfError(await getBlobApiErrorMessage(err, t('results.pdfError') || 'PDF indirme hatası'));
     } finally {
       setPdfLoading(false);
     }
-  }, [id, language, t]);
+  }, [id, isPdfReady, pdfPendingMessage, language, t]);
 
   const testTypeLabels = useMemo(
     () => ({
@@ -203,7 +213,7 @@ export default function Results() {
           <button
             className="inline-flex items-center gap-2 px-6 py-3 bg-gray-900 text-white font-medium rounded-lg hover:bg-gray-800 transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={handlePdfDownload}
-            disabled={pdfLoading}
+            disabled={pdfLoading || !isPdfReady}
           >
             {pdfLoading ? (
               <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
@@ -214,6 +224,9 @@ export default function Results() {
           </button>
           {pdfError && (
             <p className="mt-2 text-sm text-red-500">{pdfError}</p>
+          )}
+          {!pdfError && !isPdfReady && (
+            <p className="mt-2 text-sm text-amber-600">{pdfPendingMessage}</p>
           )}
         </div>
 
@@ -226,4 +239,3 @@ export default function Results() {
     </div>
   );
 }
-

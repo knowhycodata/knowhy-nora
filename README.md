@@ -15,7 +15,8 @@
 | Submission | URL |
 |---|---|
 | **Public Repository** | https://github.com/knowhycodata/knowhy-nora |
-| **Live Demo** | https://nora-frontend-806414321712.us-central1.run.app |
+| **Live Demo** | https://nora.knowhy.app |
+| **Cloud Run Fallback** | https://nora-frontend-806414321712.us-central1.run.app |
 | **Demo Video** | *https://youtu.be/gtv1Bgd5Exc* | English Dubbed: https://youtu.be/m4iG0bB2zdI
 
 ---
@@ -182,7 +183,7 @@ docker-compose up -d
 
 > **Competition Requirement:** Backend must run on Google Cloud.
 >
-> **Proof:** [Live Demo](https://nora-frontend-806414321712.us-central1.run.app) + [Backend Health](https://nora-backend-806414321712.us-central1.run.app/api/health)
+> **Proof:** [Live Demo](https://nora.knowhy.app) + [Cloud Run Fallback](https://nora-frontend-806414321712.us-central1.run.app) + [Backend Health](https://nora-backend-806414321712.us-central1.run.app/api/health)
 
 ### Method 1: Automated Deploy Script (⭐ Bonus: IaC)
 
@@ -324,8 +325,10 @@ gcloud run deploy nora-frontend \
 #### 6.7 CORS Update
 
 ```bash
+CUSTOM_FRONTEND_ORIGIN=https://nora.knowhy.app
 FRONTEND_URL=$(gcloud run services describe nora-frontend --region=$REGION --format='value(status.url)')
-gcloud run services update nora-backend --region $REGION --update-env-vars "FRONTEND_URL=$FRONTEND_URL"
+CORS_ALLOWED_ORIGINS="$CUSTOM_FRONTEND_ORIGIN,$FRONTEND_URL,http://localhost:5173"
+gcloud run services update nora-backend --region $REGION --update-env-vars "^|^FRONTEND_URL=$CUSTOM_FRONTEND_ORIGIN|CORS_ALLOWED_ORIGINS=$CORS_ALLOWED_ORIGINS"
 ```
 
 </details>
@@ -334,7 +337,8 @@ gcloud run services update nora-backend --region $REGION --update-env-vars "FRON
 
 | Service | URL | Status |
 |---|---|---|
-| **Frontend** | https://nora-frontend-806414321712.us-central1.run.app | ✅ Active |
+| **Frontend (Custom Domain)** | https://nora.knowhy.app | After DNS mapping |
+| **Frontend (Cloud Run fallback)** | https://nora-frontend-806414321712.us-central1.run.app | ✅ Active |
 | **Backend** | https://nora-backend-806414321712.us-central1.run.app | ✅ Active |
 | **Health Check** | https://nora-backend-806414321712.us-central1.run.app/api/health | ✅ 200 OK |
 
@@ -399,7 +403,8 @@ This project was developed for ****.
 | Teslim | URL |
 |---|---|
 | **Public Repository** | https://github.com/knowhycodata/knowhy-nora |
-| **Live Demo** | https://nora-frontend-806414321712.us-central1.run.app |
+| **Live Demo** | https://nora.knowhy.app |
+| **Cloud Run Fallback** | https://nora-frontend-806414321712.us-central1.run.app |
 | **Demo Video (<4 dk)** | **https://youtu.be/gtv1Bgd5Exc* | İngilizce Dublaj: https://youtu.be/m4iG0bB2zdI
 
 ---
@@ -566,7 +571,7 @@ docker-compose up -d
 
 > **Yarışma Şartı:** Backend Google Cloud üzerinde çalışmalıdır.
 >
-> **Kanıt:** [Live Demo](https://nora-frontend-806414321712.us-central1.run.app) + [Backend Health](https://nora-backend-806414321712.us-central1.run.app/api/health)
+> **Kanıt:** [Live Demo](https://nora.knowhy.app) + [Cloud Run Fallback](https://nora-frontend-806414321712.us-central1.run.app) + [Backend Health](https://nora-backend-806414321712.us-central1.run.app/api/health)
 
 ### Yöntem 1: Otomatik Deploy Script (⭐ Bonus: IaC)
 
@@ -708,8 +713,10 @@ gcloud run deploy nora-frontend \
 #### 6.7 CORS Güncelle
 
 ```bash
+CUSTOM_FRONTEND_ORIGIN=https://nora.knowhy.app
 FRONTEND_URL=$(gcloud run services describe nora-frontend --region=$REGION --format='value(status.url)')
-gcloud run services update nora-backend --region $REGION --update-env-vars "FRONTEND_URL=$FRONTEND_URL"
+CORS_ALLOWED_ORIGINS="$CUSTOM_FRONTEND_ORIGIN,$FRONTEND_URL,http://localhost:5173"
+gcloud run services update nora-backend --region $REGION --update-env-vars "^|^FRONTEND_URL=$CUSTOM_FRONTEND_ORIGIN|CORS_ALLOWED_ORIGINS=$CORS_ALLOWED_ORIGINS"
 ```
 
 </details>
@@ -718,7 +725,8 @@ gcloud run services update nora-backend --region $REGION --update-env-vars "FRON
 
 | Servis | URL | Durum |
 |---|---|---|
-| **Frontend** | https://nora-frontend-806414321712.us-central1.run.app | ✅ Aktif |
+| **Frontend (Custom Domain)** | https://nora.knowhy.app | DNS mapping sonrası |
+| **Frontend (Cloud Run fallback)** | https://nora-frontend-806414321712.us-central1.run.app | ✅ Aktif |
 | **Backend** | https://nora-backend-806414321712.us-central1.run.app | ✅ Aktif |
 | **Health Check** | https://nora-backend-806414321712.us-central1.run.app/api/health | ✅ 200 OK |
 

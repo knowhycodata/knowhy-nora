@@ -13,7 +13,7 @@ const authRoutes = require('./routes/auth');
 const sessionRoutes = require('./routes/sessions');
 const testRoutes = require('./routes/tests');
 const { GeminiLiveSession } = require('./services/geminiLive');
-const { handleToolCall, registerGeminiSession, unregisterGeminiSession, registerVisualTestAgent, unregisterVisualTestAgent, registerVideoAnalysisAgent, unregisterVideoAnalysisAgent, getVideoAnalysisAgent, registerCameraPresenceAgent, unregisterCameraPresenceAgent, getCameraPresenceAgent, registerBrainAgent, unregisterBrainAgent, registerDateTimeAgent, unregisterDateTimeAgent, registerSessionLanguage, unregisterSessionLanguage } = require('./services/toolHandler');
+const { handleToolCall, registerGeminiSession, unregisterGeminiSession, registerVisualTestAgent, unregisterVisualTestAgent, registerVideoAnalysisAgent, unregisterVideoAnalysisAgent, getVideoAnalysisAgent, registerCameraPresenceAgent, unregisterCameraPresenceAgent, getCameraPresenceAgent, registerBrainAgent, unregisterBrainAgent, registerDateTimeAgent, unregisterDateTimeAgent, registerSessionLanguage, unregisterSessionLanguage, markCameraPermissionStatus, markCameraFrameReceived, unregisterCameraAccessState } = require('./services/toolHandler');
 const { BrainAgent } = require('./services/brainAgent');
 const { VisualTestAgent } = require('./services/visualTestAgent');
 const { VideoAnalysisAgent } = require('./services/videoAnalysisAgent');
@@ -21,7 +21,7 @@ const { CameraPresenceAgent } = require('./services/cameraPresenceAgent');
 const { DateTimeAgent } = require('./services/dateTimeAgent');
 const { prefetchStory, clearPrefetchCache } = require('./services/storyPrefetchAgent');
 const prisma = require('./lib/prisma');
-const { normalizeLanguage } = require('./lib/language');
+const { normalizeLanguage, pickText } = require('./lib/language');
 
 const log = createLogger('Server');
 
@@ -29,13 +29,51 @@ const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 3001;
 
+function normalizeOrigin(origin) {
+  if (typeof origin !== 'string') return null;
+  const trimmed = origin.trim();
+  if (!trimmed) return null;
+
+  try {
+    const parsed = new URL(trimmed);
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch (_) {
+    return trimmed.replace(/\/+$/, '');
+  }
+}
+
+function resolveAllowedOrigins() {
+  const configuredOrigins = [process.env.CORS_ALLOWED_ORIGINS, process.env.FRONTEND_URL]
+    .filter(Boolean)
+    .flatMap((value) => value.split(','))
+    .map(normalizeOrigin)
+    .filter(Boolean);
+
+  return Array.from(new Set(['http://localhost:5173', ...configuredOrigins].map(normalizeOrigin).filter(Boolean)));
+}
+
+const allowedOrigins = resolveAllowedOrigins();
+
 // Güvenlik middleware'leri
 app.use(helmet());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    const normalizedOrigin = normalizeOrigin(origin);
+    if (normalizedOrigin && allowedOrigins.includes(normalizedOrigin)) {
+      return callback(null, true);
+    }
+
+    log.warn('Blocked CORS origin', { origin, normalizedOrigin });
+    return callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
+log.info('CORS allowlist configured', { allowedOrigins });
 
 // Rate limiting — IP bazlı genel limit
 const generalLimiter = rateLimit({
@@ -277,6 +315,7 @@ wss.on('connection', async (ws, req) => {
           case 'video_frame': {
             // Frontend'den gelen kamera frame'i → VideoAnalysisAgent'a ilet
             if (testSessionId && message.frameData) {
+              markCameraFrameReceived(testSessionId);
               const videoAgent = getVideoAnalysisAgent(testSessionId);
               if (videoAgent && videoAgent.isActive) {
                 videoAgent.analyzeFrame(message.frameData)
@@ -295,6 +334,69 @@ wss.on('connection', async (ws, req) => {
             break;
           }
 
+          case 'camera_permission_status': {
+            if (!testSessionId) {
+              break;
+            }
+
+            const status = typeof message.status === 'string' ? message.status : 'error';
+            const cameraMessage = pickText(
+              sessionLanguage,
+              status === 'denied'
+                ? 'Kamera izni reddedildi. Test 4 ve oturum tamamlama icin kamera zorunludur. Lutfen tarayici ayarlarindan izin verip tekrar deneyin.'
+                : status === 'granted'
+                ? 'Kamera izni verildi. Test 4 devam edebilir.'
+                : 'Kamera acilamadi. Test 4 icin calisir durumda bir kamera gereklidir.',
+              status === 'denied'
+                ? 'Camera permission was denied. Camera access is mandatory for Test 4 and session completion. Please allow it from browser settings and try again.'
+                : status === 'granted'
+                ? 'Camera permission granted. Test 4 can continue.'
+                : 'The camera could not be opened. A working camera is required for Test 4.'
+            );
+
+            markCameraPermissionStatus(testSessionId, status, message.error || message.message || null);
+            log.info('Camera permission status received', {
+              clientId,
+              testSessionId,
+              status,
+              error: message.error || null,
+            });
+
+            if (status === 'granted') {
+              ws.send(JSON.stringify({
+                type: 'camera_permission_restored',
+                status,
+                message: cameraMessage,
+              }));
+              if (geminiSession) {
+                geminiSession.sendText(
+                  pickText(
+                    sessionLanguage,
+                    'VIDEO_ANALYSIS_READY: Kamera izni verildi. Test 4 akisina kaldigin yerden devam edebilirsin.',
+                    'VIDEO_ANALYSIS_READY: Camera permission is now granted. You may resume Test 4 from where you left off.'
+                  )
+                );
+              }
+              break;
+            }
+
+            ws.send(JSON.stringify({
+              type: 'camera_permission_required',
+              status,
+              message: cameraMessage,
+            }));
+            if (geminiSession) {
+              geminiSession.sendText(
+                pickText(
+                  sessionLanguage,
+                  'VIDEO_ANALYSIS_BLOCKED: Kullanici kamera iznini vermedi veya kamera acilamadi. Yeni yönelim sorusu sorma. Kameranin zorunlu oldugunu acikla, tarayici izinlerinden kamerayi acmasini iste ve VIDEO_ANALYSIS_READY mesajini bekle. verify_orientation_answer, submit_orientation, stop_video_analysis veya complete_session cagirarak devam etme.',
+                  'VIDEO_ANALYSIS_BLOCKED: The user has not granted camera access or the camera could not be opened. Do not ask a new orientation question. Explain that camera access is mandatory, ask the user to enable it in browser settings, and wait for VIDEO_ANALYSIS_READY. Do not continue by calling verify_orientation_answer, submit_orientation, stop_video_analysis, or complete_session.'
+                )
+              );
+            }
+            break;
+          }
+
           case 'end_session': {
             if (geminiSession) {
               geminiSession.close();
@@ -306,6 +408,7 @@ wss.on('connection', async (ws, req) => {
               unregisterBrainAgent(testSessionId);
               unregisterDateTimeAgent(testSessionId);
               unregisterSessionLanguage(testSessionId);
+              unregisterCameraAccessState(testSessionId);
               clearPrefetchCache(testSessionId);
               geminiSession = null;
             }
@@ -354,6 +457,7 @@ wss.on('connection', async (ws, req) => {
       unregisterBrainAgent(testSessionId);
       unregisterDateTimeAgent(testSessionId);
       unregisterSessionLanguage(testSessionId);
+      unregisterCameraAccessState(testSessionId);
       clearPrefetchCache(testSessionId);
     }
     // FIX: WebSocket kapatıldığında DB'de session durumunu CANCELLED yap
@@ -385,6 +489,7 @@ wss.on('connection', async (ws, req) => {
       unregisterBrainAgent(testSessionId);
       unregisterDateTimeAgent(testSessionId);
       unregisterSessionLanguage(testSessionId);
+      unregisterCameraAccessState(testSessionId);
       clearPrefetchCache(testSessionId);
     }
   });

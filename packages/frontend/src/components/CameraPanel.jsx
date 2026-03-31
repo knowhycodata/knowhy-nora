@@ -22,6 +22,7 @@ export default function CameraPanel({
   cameraCommand, 
   analysisResult, 
   onSendFrame,
+  onPermissionChange = null,
   onClose,
   variant = 'inline',
   presenceAlert = null,
@@ -78,24 +79,33 @@ export default function CameraPanel({
           console.warn('Kamera play() AbortError - yeni kaynak yukleniyor, yeniden denenecek.');
         }
         setCameraReady(true);
+        onPermissionChange?.({
+          status: 'granted',
+          message: t('camera.active'),
+        });
       }
     } catch (err) {
       if (err?.name === 'AbortError') {
         return;
       }
       console.error('Kamera hatası:', err);
-      setCameraError(
+      const nextCameraError =
         err.name === 'NotAllowedError' 
           ? t('camera.permissionDenied')
-          : t('camera.openError', { error: err.message })
-      );
+          : t('camera.openError', { error: err.message });
+      setCameraError(nextCameraError);
+      onPermissionChange?.({
+        status: err.name === 'NotAllowedError' ? 'denied' : 'error',
+        error: err.name || 'CameraError',
+        message: nextCameraError,
+      });
     }
     })().finally(() => {
       startCameraPromiseRef.current = null;
     });
 
     return startCameraPromiseRef.current;
-  }, [cameraReady, t]);
+  }, [cameraReady, onPermissionChange, t]);
 
   // Kamera kapat
   const stopCamera = useCallback(() => {

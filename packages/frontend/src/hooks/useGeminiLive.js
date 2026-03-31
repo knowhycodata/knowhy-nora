@@ -98,6 +98,7 @@ export function useGeminiLive() {
   const [generatedImage, setGeneratedImage] = useState(null);
   const [imageGenerating, setImageGenerating] = useState(false);
   const [error, setError] = useState(null);
+  const [cameraAccessError, setCameraAccessError] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [inputLevel, setInputLevel] = useState(0);
@@ -316,6 +317,7 @@ export function useGeminiLive() {
     setCameraCommand(null);
     setVideoAnalysisResult(null);
     setCameraPresence(null);
+    setCameraAccessError(null);
 
     stopMic();
     clearAudioBuffer();
@@ -606,6 +608,21 @@ export function useGeminiLive() {
         }
         break;
 
+      case 'camera_permission_required':
+        setCameraAccessError(
+          message.message ||
+          pickText(
+            sessionLanguageRef.current,
+            'Kamera izni olmadan Test 4 devam edemez.',
+            'Test 4 cannot continue without camera access.'
+          )
+        );
+        break;
+
+      case 'camera_permission_restored':
+        setCameraAccessError(null);
+        break;
+
       case 'video_analysis_result':
         log.info('Video analysis result', { 
           expression: message.analysis?.facialExpression,
@@ -820,6 +837,37 @@ export function useGeminiLive() {
     }
   }, []);
 
+  const reportCameraPermissionStatus = useCallback((payload) => {
+    const status = typeof payload?.status === 'string' ? payload.status : 'error';
+    const message = typeof payload?.message === 'string' && payload.message.trim()
+      ? payload.message
+      : (
+        status === 'granted'
+          ? pickText(sessionLanguageRef.current, 'Kamera izni verildi.', 'Camera permission granted.')
+          : pickText(
+              sessionLanguageRef.current,
+              'Kamera izni olmadan Test 4 devam edemez.',
+              'Test 4 cannot continue without camera access.'
+            )
+      );
+
+    if (status === 'granted') {
+      setCameraAccessError(null);
+    } else {
+      setCameraAccessError(message);
+    }
+
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'camera_permission_status',
+        status,
+        message,
+        error: payload?.error || null,
+      }));
+    }
+  }, []);
+
   const disconnect = useCallback(() => {
     completionLockedRef.current = false;
     reconnectAttemptsRef.current = 0;
@@ -851,6 +899,7 @@ export function useGeminiLive() {
     setGeneratedImage(null);
     setImageGenerating(false);
     setError(null);
+    setCameraAccessError(null);
     setTimer(null);
     setInputLevel(0);
     setOutputLevel(0);
@@ -897,7 +946,7 @@ export function useGeminiLive() {
     currentTest,
     generatedImage,
     imageGenerating,
-    error,
+    error: error || cameraAccessError,
     isRecording,
     isSpeaking,
     inputLevel,
@@ -910,6 +959,7 @@ export function useGeminiLive() {
     connectAndStart,
     sendText,
     sendVideoFrame,
+    reportCameraPermissionStatus,
     endSession,
     disconnect,
   };

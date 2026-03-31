@@ -18,6 +18,7 @@ REGION="us-central1"
 REPO_NAME="nora-repo"
 BACKEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/nora-backend"
 FRONTEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/nora-frontend"
+CUSTOM_FRONTEND_ORIGIN="https://nora.knowhy.app"
 BACKEND_URL=""
 FRONTEND_URL=""
 
@@ -103,14 +104,15 @@ echo -e "${GREEN}✓ Frontend deploy tamamlandı${NC}"
 FRONTEND_URL=$(gcloud run services describe nora-frontend --region "${REGION}" --format='value(status.url)')
 echo -e "${CYAN}Frontend URL: ${FRONTEND_URL}${NC}"
 
-# Backend CORS URL güncelle
+# Backend frontend origin + CORS allowlist güncelle
 echo ""
-echo -e "${YELLOW}[7/7] Backend FRONTEND_URL güncelleniyor...${NC}"
+CORS_ALLOWED_ORIGINS="${CUSTOM_FRONTEND_ORIGIN},${FRONTEND_URL},http://localhost:5173"
+echo -e "${YELLOW}[7/7] Backend frontend origin + CORS allowlist güncelleniyor...${NC}"
 gcloud run services update nora-backend \
     --region "${REGION}" \
-    --update-env-vars "FRONTEND_URL=${FRONTEND_URL}" \
+    --update-env-vars "^|^FRONTEND_URL=${CUSTOM_FRONTEND_ORIGIN}|CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}" \
     --quiet
-echo -e "${GREEN}✓ Backend FRONTEND_URL güncellendi${NC}"
+echo -e "${GREEN}✓ Backend frontend origin + CORS allowlist güncellendi${NC}"
 
 # Özet
 echo ""
@@ -119,7 +121,8 @@ echo -e "${GREEN}   DEPLOY BAŞARILI!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 echo -e "${CYAN}URL'ler:${NC}"
-echo "  Frontend: ${FRONTEND_URL}"
+echo "  Frontend (Cloud Run): ${FRONTEND_URL}"
+echo "  Frontend (Custom):    ${CUSTOM_FRONTEND_ORIGIN}"
 echo "  Backend:  ${BACKEND_URL}"
 echo "  Health:   ${BACKEND_URL}/api/health"
 echo ""

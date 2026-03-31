@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import { getApiErrorMessage } from '../lib/apiErrors';
 
 export default function Register() {
   const [name, setName] = useState('');
@@ -23,7 +24,7 @@ export default function Register() {
       await register(name, email, password);
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.error || t('auth.registerFailed'));
+      setError(getApiErrorMessage(err, t('auth.registerFailed')));
     } finally {
       setLoading(false);
     }

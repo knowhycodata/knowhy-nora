@@ -6,6 +6,7 @@ export default function CameraModal({
   cameraCommand,
   analysisResult,
   onSendFrame,
+  onPermissionChange = null,
   presenceAlert,
   onClose = null,
 }) {
@@ -41,6 +42,7 @@ export default function CameraModal({
           cameraCommand={cameraCommand}
           analysisResult={analysisResult}
           onSendFrame={onSendFrame}
+          onPermissionChange={onPermissionChange}
           onClose={onClose}
           variant="modal"
           presenceAlert={presenceAlert}

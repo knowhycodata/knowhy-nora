@@ -401,6 +401,7 @@ export default function AgentSession() {
         cameraCommand={gemini.cameraCommand}
         analysisResult={gemini.videoAnalysisResult}
         onSendFrame={gemini.sendVideoFrame}
+        onPermissionChange={gemini.reportCameraPermissionStatus}
         presenceAlert={gemini.cameraPresence}
         onClose={null}
       />

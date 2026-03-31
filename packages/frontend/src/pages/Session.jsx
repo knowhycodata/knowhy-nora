@@ -34,6 +34,7 @@ export default function Session() {
     cameraCommand,
     videoAnalysisResult,
     sendVideoFrame,
+    reportCameraPermissionStatus,
     connectAndStart,
     endSession,
     disconnect,
@@ -202,6 +203,7 @@ export default function Session() {
                 cameraCommand={cameraCommand}
                 analysisResult={videoAnalysisResult}
                 onSendFrame={sendVideoFrame}
+                onPermissionChange={reportCameraPermissionStatus}
                 onClose={null}
               />
             </div>

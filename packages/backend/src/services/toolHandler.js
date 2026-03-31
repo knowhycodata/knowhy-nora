@@ -41,10 +41,20 @@ const dateTimeAgents = new Map(); // sessionId -> DateTimeAgent
 // Session dil tercihleri (session bazlı)
 const sessionLanguages = new Map(); // sessionId -> 'tr' | 'en'
 
+// Kamera erişim durumu (session bazlı)
+const cameraAccessStates = new Map(); // sessionId -> camera state
+
 // Orientation guard state (session bazlı)
 const orientationGuardStates = new Map(); // sessionId -> { blockedCount, lastRepromptAt, lastQuestionType }
 const ORIENTATION_GUARD_REPROMPT_COOLDOWN_MS = 5000;
 const ORIENTATION_GUARD_FALLBACK_THRESHOLD = 3;
+const REQUIRED_TEST_TYPES = [
+  'VERBAL_FLUENCY',
+  'STORY_RECALL',
+  'VISUAL_RECOGNITION',
+  'ORIENTATION',
+  'VIDEO_ANALYSIS',
+];
 
 function registerSessionLanguage(sessionId, language) {
   sessionLanguages.set(sessionId, normalizeLanguage(language));
@@ -57,6 +67,94 @@ function unregisterSessionLanguage(sessionId) {
 
 function getSessionLanguage(sessionId) {
   return sessionLanguages.get(sessionId) || 'tr';
+}
+
+function ensureCameraAccessState(sessionId) {
+  if (!cameraAccessStates.has(sessionId)) {
+    cameraAccessStates.set(sessionId, {
+      required: false,
+      permissionGranted: false,
+      permissionDenied: false,
+      frameReceived: false,
+      lastStatus: 'idle',
+      lastError: null,
+      lastUpdatedAt: null,
+    });
+  }
+
+  return cameraAccessStates.get(sessionId);
+}
+
+function markCameraPermissionRequested(sessionId) {
+  const state = ensureCameraAccessState(sessionId);
+  Object.assign(state, {
+    required: true,
+    permissionGranted: false,
+    permissionDenied: false,
+    frameReceived: false,
+    lastStatus: 'pending',
+    lastError: null,
+    lastUpdatedAt: Date.now(),
+  });
+  return state;
+}
+
+function markCameraPermissionStatus(sessionId, status, errorMessage = null) {
+  const state = ensureCameraAccessState(sessionId);
+  state.required = true;
+  state.lastStatus = status || 'unknown';
+  state.lastError = errorMessage || null;
+  state.lastUpdatedAt = Date.now();
+
+  if (status === 'granted') {
+    state.permissionGranted = true;
+    state.permissionDenied = false;
+    return state;
+  }
+
+  state.permissionGranted = false;
+  state.permissionDenied = status === 'denied';
+  return state;
+}
+
+function markCameraFrameReceived(sessionId) {
+  const state = ensureCameraAccessState(sessionId);
+  state.required = true;
+  state.permissionGranted = true;
+  state.permissionDenied = false;
+  state.frameReceived = true;
+  state.lastStatus = 'streaming';
+  state.lastUpdatedAt = Date.now();
+  return state;
+}
+
+function getCameraAccessState(sessionId) {
+  return ensureCameraAccessState(sessionId);
+}
+
+function unregisterCameraAccessState(sessionId) {
+  cameraAccessStates.delete(sessionId);
+}
+
+function getCameraBlockedResult(language, cameraState) {
+  const isPermissionDenied = cameraState?.permissionDenied;
+  const reason = isPermissionDenied ? 'CAMERA_PERMISSION_DENIED' : 'CAMERA_REQUIRED';
+  const message = pickText(
+    language,
+    isPermissionDenied
+      ? 'Kamera izni reddedildi. Test 4 ve oturum tamamlama icin kamera izni zorunludur. Kullanicidan tarayici izinlerinden kamerayi acmasini iste.'
+      : 'Kamera hazir degil. Test 4 ve oturum tamamlama icin once kameranin acilmasi gerekir.',
+    isPermissionDenied
+      ? 'Camera permission was denied. Camera access is required to continue Test 4 and complete the session. Ask the user to allow camera access from browser settings.'
+      : 'Camera is not ready. The camera must be opened before Test 4 and session completion can continue.'
+  );
+
+  return {
+    success: false,
+    blocked: true,
+    reason,
+    message,
+  };
 }
 
 function registerVisualTestAgent(sessionId, agent) {
@@ -481,6 +579,12 @@ async function handleVisualRecognition({ sessionId, answers }) {
 
 async function handleOrientation({ sessionId, answers }) {
   const language = getSessionLanguage(sessionId);
+  const cameraState = getCameraAccessState(sessionId);
+
+  if (cameraState.required && !cameraState.frameReceived) {
+    return getCameraBlockedResult(language, cameraState);
+  }
+
   const result = scoreOrientation(answers);
 
   await prisma.testResult.upsert({
@@ -512,6 +616,7 @@ async function handleOrientation({ sessionId, answers }) {
 async function handleStartVideoAnalysis({ sessionId }) {
   const language = getSessionLanguage(sessionId);
   log.info('start_video_analysis çağrıldı', { sessionId });
+  markCameraPermissionRequested(sessionId);
 
   const agent = videoAnalysisAgents.get(sessionId);
   if (!agent) {
@@ -537,6 +642,11 @@ async function handleStartVideoAnalysis({ sessionId }) {
 async function handleStopVideoAnalysis({ sessionId }) {
   const language = getSessionLanguage(sessionId);
   log.info('stop_video_analysis çağrıldı', { sessionId });
+  const cameraState = getCameraAccessState(sessionId);
+
+  if (cameraState.required && !cameraState.frameReceived) {
+    return getCameraBlockedResult(language, cameraState);
+  }
 
   const agent = videoAnalysisAgents.get(sessionId);
   if (!agent) {
@@ -635,6 +745,15 @@ async function handleGetCurrentDateTime({ sessionId }) {
 async function handleVerifyOrientationAnswer({ sessionId, questionType, userAnswer, context }) {
   const language = getSessionLanguage(sessionId);
   log.info('verify_orientation_answer çağrıldı', { sessionId, questionType, userAnswer });
+  const cameraState = getCameraAccessState(sessionId);
+
+  if (cameraState.required && !cameraState.frameReceived) {
+    return {
+      ...getCameraBlockedResult(language, cameraState),
+      questionType,
+      retryAfterMs: 2000,
+    };
+  }
 
   let agent = dateTimeAgents.get(sessionId);
   if (!agent) {
@@ -750,6 +869,30 @@ async function handleCompleteSession({ sessionId }) {
   const testResults = await prisma.testResult.findMany({
     where: { sessionId },
   });
+  const cameraState = getCameraAccessState(sessionId);
+  const completedTestTypes = new Set(testResults.map((result) => result.testType));
+  const missingTests = REQUIRED_TEST_TYPES.filter((testType) => !completedTestTypes.has(testType));
+
+  if (missingTests.length > 0) {
+    const cameraBlocked = missingTests.includes('VIDEO_ANALYSIS') && cameraState.required && !cameraState.frameReceived;
+    const baseBlockedResult = cameraBlocked
+      ? getCameraBlockedResult(language, cameraState)
+      : {
+          success: false,
+          blocked: true,
+          reason: 'MISSING_TEST_RESULTS',
+          message: pickText(
+            language,
+            `Oturum henuz tamamlanamiyor. Eksik testler var: ${missingTests.join(', ')}.`,
+            `The session cannot be completed yet. Missing test results: ${missingTests.join(', ')}.`
+          ),
+        };
+
+    return {
+      ...baseBlockedResult,
+      missingTests,
+    };
+  }
 
   // Sorun 3 FIX: Normalize edilmiş ortalama — her test eşit ağırlıkta
   // Her testin yüzdesini hesapla, sonra ortalama al (farklı maxScore'lar adaletli tartılır)
@@ -817,4 +960,9 @@ module.exports = {
   registerSessionLanguage,
   unregisterSessionLanguage,
   getSessionLanguage,
+  markCameraPermissionRequested,
+  markCameraPermissionStatus,
+  markCameraFrameReceived,
+  getCameraAccessState,
+  unregisterCameraAccessState,
 };

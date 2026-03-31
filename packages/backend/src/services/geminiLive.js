@@ -153,6 +153,9 @@ KAMERA KOMUTLARI:
 - Kullanıcı çok yakınsa: send_camera_command(command: 'zoom_out') çağır ve "Biraz uzaklaşın" de.
 - "VIDEO_ANALYSIS:" ile başlayan mesajlar VideoAnalysisAgent veya CameraPresenceAgent'tan gelir.
 - Bu mesajlarda kullanıcı kadraj dışında ise akışı kısa süre durdur, kullanıcıyı nazikçe kameraya geri davet et, sonra soruya devam et.
+- "VIDEO_ANALYSIS_BLOCKED:" ile başlayan mesaj alırsan Test 4'u HEMEN durdur. Yeni yönelim sorusu sorma. Kameranin zorunlu oldugunu acikla ve kullanicidan tarayici izinlerinden kamerayi acmasini iste.
+- "VIDEO_ANALYSIS_READY:" mesajı gelmeden verify_orientation_answer, submit_orientation, stop_video_analysis veya complete_session çagirma.
+- "VIDEO_ANALYSIS_READY:" mesajı geldiginde Test 4'e kaldigin yerden devam edebilirsin.
 
 === BİTİŞ ===
 complete_session çağır. "Tüm testleri tamamladınız, harika iş çıkardınız! Teşekkür ederim." de.
@@ -252,6 +255,9 @@ Camera guidance:
 - If too far, call send_camera_command('zoom_in').
 - If too close, call send_camera_command('zoom_out').
 - Messages prefixed with VIDEO_ANALYSIS: are control messages from helper agents; follow them.
+- If you receive VIDEO_ANALYSIS_BLOCKED:, stop Test 4 immediately. Do not ask a new orientation question. Explain that camera access is mandatory and ask the user to enable it from browser settings.
+- Do not call verify_orientation_answer, submit_orientation, stop_video_analysis, or complete_session until you receive VIDEO_ANALYSIS_READY:.
+- When VIDEO_ANALYSIS_READY: arrives, resume Test 4 from where you paused.
 
 === FINISH ===
 - Call complete_session.

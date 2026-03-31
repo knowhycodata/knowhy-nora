@@ -4,17 +4,27 @@ const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const prisma = require('../lib/prisma');
 const { authenticate } = require('../middleware/auth');
+const { isSafeEmail, normalizeEmailInput } = require('../lib/emailValidation');
 
 const router = express.Router();
+const INVALID_EMAIL_MESSAGE = 'Geçerli bir e-posta adresi girin';
+
+function emailValidator() {
+  return body('email')
+    .customSanitizer(normalizeEmailInput)
+    .custom((value) => {
+      if (!isSafeEmail(value)) {
+        throw new Error(INVALID_EMAIL_MESSAGE);
+      }
+      return true;
+    });
+}
 
 // Kayıt
 router.post(
   '/register',
   [
-    body('email')
-      .isEmail().withMessage('Geçerli bir e-posta adresi girin')
-      .normalizeEmail()
-      .isLength({ max: 254 }).withMessage('E-posta çok uzun'),
+    emailValidator(),
     body('password')
       .isLength({ min: 6, max: 128 }).withMessage('Şifre 6-128 karakter arası olmalı')
       .custom((value) => {
@@ -66,7 +76,7 @@ router.post(
 router.post(
   '/login',
   [
-    body('email').isEmail().withMessage('Geçerli bir e-posta adresi girin').normalizeEmail(),
+    emailValidator(),
     body('password').notEmpty().withMessage('Şifre gerekli').isLength({ max: 128 }).withMessage('Şifre çok uzun'),
   ],
   async (req, res) => {

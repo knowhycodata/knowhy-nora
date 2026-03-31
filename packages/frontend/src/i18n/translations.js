@@ -18,7 +18,7 @@ export const translations = {
       sessionRequired: 'Ajanla konuşmaya başlamadan önce bir dil seçmelisiniz.',
     },
     landing: {
-      badge: 'Gemini Live AI ile Gerçek Zamanlı Sesli Etkileşim',
+      badge: 'Nöra ile Gerçek Zamanlı Sesli Etkileşim',
       titleLine1: 'Bilişsel Sağlığınızı',
       titleLine2: 'Yapay Zeka ile Tarayın',
       description: 'Nöra, Alzheimer ve bilişsel bozuklukların erken tespiti için tasarlanmış sesli yapay zeka asistanıdır. 4 bilişsel test uygular ve detaylı sonuç raporu oluşturur.',
@@ -201,7 +201,7 @@ export const translations = {
       sessionRequired: 'You must choose a language before talking to the agent.',
     },
     landing: {
-      badge: 'Real-Time Voice Interaction with Gemini Live AI',
+      badge: 'Real-Time Voice Interaction with Nöra',
       titleLine1: 'Screen Your Cognitive Health',
       titleLine2: 'with AI',
       description: 'Nora is a voice AI assistant designed for early screening of Alzheimer’s and cognitive impairment. It runs 4 cognitive tests and generates a detailed report.',
