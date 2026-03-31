@@ -307,7 +307,7 @@ wss.on('connection', async (ws, req) => {
 
           case 'text': {
             if (geminiSession) {
-              geminiSession.sendText(message.text);
+              geminiSession.sendUserText(message.text);
             }
             break;
           }
@@ -369,13 +369,7 @@ wss.on('connection', async (ws, req) => {
                 message: cameraMessage,
               }));
               if (geminiSession) {
-                geminiSession.sendText(
-                  pickText(
-                    sessionLanguage,
-                    'VIDEO_ANALYSIS_READY: Kamera izni verildi. Test 4 akisina kaldigin yerden devam edebilirsin.',
-                    'VIDEO_ANALYSIS_READY: Camera permission is now granted. You may resume Test 4 from where you left off.'
-                  )
-                );
+                geminiSession.resumeCameraPermissionGate();
               }
               break;
             }
@@ -385,15 +379,6 @@ wss.on('connection', async (ws, req) => {
               status,
               message: cameraMessage,
             }));
-            if (geminiSession) {
-              geminiSession.sendText(
-                pickText(
-                  sessionLanguage,
-                  'VIDEO_ANALYSIS_BLOCKED: Kullanici kamera iznini vermedi veya kamera acilamadi. Yeni yönelim sorusu sorma. Kameranin zorunlu oldugunu acikla, tarayici izinlerinden kamerayi acmasini iste ve VIDEO_ANALYSIS_READY mesajini bekle. verify_orientation_answer, submit_orientation, stop_video_analysis veya complete_session cagirarak devam etme.',
-                  'VIDEO_ANALYSIS_BLOCKED: The user has not granted camera access or the camera could not be opened. Do not ask a new orientation question. Explain that camera access is mandatory, ask the user to enable it in browser settings, and wait for VIDEO_ANALYSIS_READY. Do not continue by calling verify_orientation_answer, submit_orientation, stop_video_analysis, or complete_session.'
-                )
-              );
-            }
             break;
           }
 

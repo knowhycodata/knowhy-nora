@@ -697,6 +697,7 @@ export function useGeminiLive() {
     }
 
     setError(null);
+    setCameraAccessError(null);
     setState(SESSION_STATES.CONNECTING);
 
     // 1. Player'ı başlat (user gesture içinde olmalı)

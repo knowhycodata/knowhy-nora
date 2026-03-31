@@ -515,7 +515,8 @@ async function handleRecordVisualAnswer({ sessionId, imageIndex, userAnswer }) {
     };
   }
 
-  // Cevabı kaydet ve sonraki görsele geç
+  // LLM'in gonderdigi userAnswer metni guvenilir kaynak degildir.
+  // Kayit yalnizca VisualTestAgent tarafinda kilitlenmis cevap varsa yapilir.
   const result = await agent.recordAnswer(imageIndex, userAnswer);
   return result;
 }
@@ -551,12 +552,34 @@ async function handleGenerateTestImage({ imageIndex, subject, sessionId }) {
 
 async function handleVisualRecognition({ sessionId, answers }) {
   const language = getSessionLanguage(sessionId);
-  const result = scoreVisualRecognition(answers);
+  const agent = visualTestAgents.get(sessionId);
+  const authoritativeAnswers =
+    agent && typeof agent.canSubmitRecognition === 'function' && agent.canSubmitRecognition()
+      ? agent.getAnswersForSubmit()
+      : null;
+
+  if (agent && !authoritativeAnswers) {
+    const status = typeof agent.getStatus === 'function' ? agent.getStatus() : null;
+    return {
+      success: false,
+      blocked: true,
+      reason: 'VISUAL_TEST_INCOMPLETE',
+      message: pickText(
+        language,
+        'Gorsel tanima testi henuz tamamlanmadi. Tum gorseller onayli cevap veya "bilmiyorum" ile kapanmadan submit_visual_recognition cagirilemez.',
+        'The visual recognition test is not complete yet. submit_visual_recognition cannot be called until all images are closed with a confirmed answer or "I do not know".'
+      ),
+      status,
+    };
+  }
+
+  const trustedAnswers = authoritativeAnswers || answers;
+  const result = scoreVisualRecognition(trustedAnswers);
 
   await prisma.testResult.upsert({
     where: { sessionId_testType: { sessionId, testType: 'VISUAL_RECOGNITION' } },
     update: {
-      rawData: { answers },
+      rawData: { answers: trustedAnswers },
       score: result.score,
       maxScore: result.maxScore,
       details: result,
@@ -564,7 +587,7 @@ async function handleVisualRecognition({ sessionId, answers }) {
     create: {
       sessionId,
       testType: 'VISUAL_RECOGNITION',
-      rawData: { answers },
+      rawData: { answers: trustedAnswers },
       score: result.score,
       maxScore: result.maxScore,
       details: result,
@@ -581,7 +604,7 @@ async function handleOrientation({ sessionId, answers }) {
   const language = getSessionLanguage(sessionId);
   const cameraState = getCameraAccessState(sessionId);
 
-  if (cameraState.required && !cameraState.frameReceived) {
+  if (cameraState.required && !cameraState.permissionGranted && !cameraState.frameReceived) {
     return getCameraBlockedResult(language, cameraState);
   }
 
@@ -635,6 +658,13 @@ async function handleStartVideoAnalysis({ sessionId }) {
   const result = agent.startAnalysis();
   return {
     ...result,
+    awaitingClientPermission: true,
+    gate: 'CAMERA_PERMISSION',
+    message: pickText(
+      language,
+      'Kamera izin akisi baslatildi. Kamera kullanima hazir olana kadar Test 4 sorularina devam etme.',
+      'Camera permission flow has started. Do not continue Test 4 questions until camera access is ready.'
+    ),
     presenceMonitoring: !!presenceAgent,
   };
 }
@@ -747,7 +777,7 @@ async function handleVerifyOrientationAnswer({ sessionId, questionType, userAnsw
   log.info('verify_orientation_answer çağrıldı', { sessionId, questionType, userAnswer });
   const cameraState = getCameraAccessState(sessionId);
 
-  if (cameraState.required && !cameraState.frameReceived) {
+  if (cameraState.required && !cameraState.permissionGranted && !cameraState.frameReceived) {
     return {
       ...getCameraBlockedResult(language, cameraState),
       questionType,

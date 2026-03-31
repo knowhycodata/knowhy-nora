@@ -107,16 +107,20 @@ AKIŞ:
 1. "Görsel tanıma testine geçiyoruz. Ekranınıza sırayla 3 görsel göstereceğim. Her birinde ne gördüğünüzü söylemenizi isteyeceğim."
 2. start_visual_test() çağır → İlk görsel otomatik ekranda gösterilir. Response'ta selectedSubjects listesi gelir.
 3. Kullanıcıya "Ekrandaki görsele bakın. Ne görüyorsunuz?" diye sor.
-4. Kullanıcı cevap verince record_visual_answer(imageIndex, userAnswer) çağır.
-5. Sonraki görsel otomatik gösterilir. Tekrar "Ne görüyorsunuz?" sor.
-6. 3 görsel de cevaplanınca record_visual_answer son görselin cevabında tüm cevapları döner.
-7. submit_visual_recognition çağır.
-8. Sonra: "Bu testi de tamamladık! Son testimize geçmeye hazır mısınız?" de.
+4. Kullanıcı cevap verince cevabı hemen kaydetme. Önce "Cevabınızı X olarak kaydedeyim mi?" diye sor ve net evet/hayır bekle.
+5. Kullanıcı açıkça "bilmiyorum" veya "göremedim" derse bunu sıfır puanlı cevap olarak kabul edebilirsin.
+6. Kullanıcı "atla", "pas geç", "skip" gibi komut verirse kabul etme. Aynı görselde kal ve cevap istemeye devam et.
+7. Sadece kullanıcı cevabı net şekilde onayladığında record_visual_answer(imageIndex, userAnswer) çağır.
+8. Sonraki görsel otomatik gösterilir. Tekrar "Ne görüyorsunuz?" sor.
+9. 3 görsel de cevaplanınca submit_visual_recognition çağır.
+10. Sonra: "Bu testi de tamamladık! Son testimize geçmeye hazır mısınız?" de.
 
 ⚠️ ASLA generate_test_image kullanma! Daima start_visual_test ve record_visual_answer kullan.
 ⚠️ Görsel verisi sana GELMEZ. Görsel doğrudan kullanıcının ekranına gösterilir.
-⚠️ Her cevaptan sonra record_visual_answer çağırmayı UNUTMA. Cevapsız sonraki görsele geçme.
-⚠️ "VISUAL_TEST_NEXT:" ile başlayan mesajlar VisualTestAgent'tan gelir. Talimatlarına uy.
+⚠️ Kullanıcıdan sesli onay almadan record_visual_answer çağırma.
+⚠️ "Atla/pas geç/skip" komutlarını cevap gibi yorumlama; aynı görselde kal.
+⚠️ record_visual_answer veya submit_visual_recognition blocked/false dönerse guard mesajına uy, aynı görselde kal ve ilerleme uydurma.
+⚠️ "VISUAL_TEST_" ile başlayan mesajlar VisualTestAgent'tan gelir. CONFIRM, REPROMPT, REASK, RECORD_READY ve GUARD mesajlarini standart akisa gore daha yuksek oncelikli kabul et.
 ⚠️ Kullanıcı onay verene kadar Test 4'e GEÇME.
 
 === TEST 4: YÖNELİM (Multi-Agent + Video Analizi) ===
@@ -131,9 +135,10 @@ CameraPresenceAgent = Kadraj Takip Ajanı — kullanıcı kameradan ayrılırsa 
 AKIŞ:
 1. "Son testimize geçiyoruz. Bu testte size zaman ve mekan ile ilgili sorular soracağım."
 2. ÖNCE get_current_datetime çağır → Güncel tarih/saat bilgisini al.
-3. start_video_analysis çağır → Kullanıcının kamerasını aç ve mimik analizi başlat.
-4. Kullanıcıya "Bu test sırasında kameranızı açmanızı rica ediyorum. Yüz ifadelerinizi gözlemleyeceğiz." de.
-5. Sırayla şu soruları sor:
+3. Kullanıcıya "Bu test sırasında kameranızı açmanızı rica ediyorum. Yüz ifadelerinizi gözlemleyeceğiz." de.
+4. start_video_analysis çağır → Kamera izin akışı başlar.
+5. Kamera hazır olana kadar BEKLE. start_video_analysis sonucu beklemeden veya VIDEO_ANALYSIS_READY gelmeden yeni yönelim sorusu sorma.
+6. Sırayla şu soruları sor:
    a) "Bugün günlerden ne?" → Cevabı al, verify_orientation_answer(questionType: 'day', userAnswer: cevap) çağır.
    b) "Şu an hangi aydayız?" → verify_orientation_answer(questionType: 'month', userAnswer: cevap)
    c) "Hangi yıldayız?" → verify_orientation_answer(questionType: 'year', userAnswer: cevap)
@@ -143,9 +148,9 @@ AKIŞ:
    g) "Saat şu an yaklaşık kaç?" → verify_orientation_answer(questionType: 'time', userAnswer: cevap)
    - Eğer verify_orientation_answer sonucu NO_FRESH_USER_ANSWER ise: soruyu en fazla bir kez tekrar et ve sonra kullanıcıyı bekle.
    - Kullanıcıdan yeni cevap duymadan verify_orientation_answer fonksiyonunu tekrar çağırma.
-6. Tüm sorular bitince stop_video_analysis çağır → Mimik analizi sonuçlarını al.
-7. submit_orientation çağır (answers dizisine her soru için correctAnswer'ı DateTimeAgent'tan al).
-8. ⚠️ verify_orientation_answer'dan gelen doğru/yanlış bilgisini kullanıcıya söyleme! Sadece kaydet.
+7. Tüm sorular bitince stop_video_analysis çağır → Mimik analizi sonuçlarını al.
+8. submit_orientation çağır (answers dizisine her soru için correctAnswer'ı DateTimeAgent'tan al).
+9. ⚠️ verify_orientation_answer'dan gelen doğru/yanlış bilgisini kullanıcıya söyleme! Sadece kaydet.
 
 KAMERA KOMUTLARI:
 - Kullanıcının yüzü görünmüyorsa: send_camera_command(command: 'center') çağır ve "Lütfen yüzünüzü kameraya doğru çevirin" de.
@@ -231,24 +236,30 @@ Flow:
 1. Explain that 3 images will be shown.
 2. Call start_visual_test.
 3. Ask: "What do you see on the screen?"
-4. After each answer call record_visual_answer.
-5. When complete, call submit_visual_recognition.
-6. Ask readiness for Test 4 and wait for confirmation.
+4. Do not record the first raw answer immediately. Ask for spoken confirmation first: "Should I record your answer as X?"
+5. If the user clearly says "I don't know" or "I can't tell", this can be recorded as a zero-point answer.
+6. If the user says "skip", "pass", or similar commands, do not accept it. Stay on the same image and keep asking what they see.
+7. Call record_visual_answer only after an explicit confirmation or explicit unknown answer.
+8. When all 3 images are closed, call submit_visual_recognition.
+9. Ask readiness for Test 4 and wait for confirmation.
+Treat any message prefixed with VISUAL_TEST_ as a high-priority control message from VisualTestAgent.
 
 === TEST 4: ORIENTATION (Multi-Agent + Video) ===
 - Start only after user confirmation.
 Flow:
 1. Explain final test briefly.
 2. Call get_current_datetime first.
-3. Call start_video_analysis.
-4. Ask orientation questions one by one:
+3. Ask the user to enable their camera for the final test.
+4. Call start_video_analysis.
+5. Wait until camera access is ready. Do not ask a new orientation question until start_video_analysis is resolved and camera access is available.
+6. Ask orientation questions one by one:
    - day, month, year, season, city, country, approximate time
-5. After each answer, call verify_orientation_answer.
+7. After each answer, call verify_orientation_answer.
    - If verify_orientation_answer returns NO_FRESH_USER_ANSWER: repeat the question at most once, then wait for the user.
    - Do not call verify_orientation_answer again until there is a new user response.
-6. Do not reveal correctness to user.
-7. After all questions, call stop_video_analysis.
-8. Call submit_orientation.
+8. Do not reveal correctness to user.
+9. After all questions, call stop_video_analysis.
+10. Call submit_orientation.
 
 Camera guidance:
 - If face not visible, call send_camera_command('center') and ask user to face camera.
@@ -333,20 +344,20 @@ const TOOL_DECLARATIONS = [
   },
   {
     name: 'record_visual_answer',
-    description: 'Kullanıcının görsel tanıma cevabını kaydeder ve sonraki görseli gösterir. Her görsel için kullanıcı cevap verdikten sonra bu fonksiyonu çağır.',
+    description: 'Kullanicinin sesli olarak onaylanmis gorsel tanima cevabini kaydeder ve sonraki gorseli gosterir. Bu fonksiyonu sadece net onay veya acik "bilmiyorum" ifadesinden sonra cagir.',
     parameters: {
       type: 'object',
       properties: {
         sessionId: { type: 'string', description: 'Test oturumu ID' },
         imageIndex: { type: 'number', description: 'Cevaplanılan görselin indeksi (0, 1, 2)' },
-        userAnswer: { type: 'string', description: 'Kullanıcının verdiği cevap (ne gördüğü)' },
+        userAnswer: { type: 'string', description: 'Sesli olarak onaylanmis cevap veya acik "bilmiyorum" ifadesi' },
       },
       required: ['sessionId', 'imageIndex', 'userAnswer'],
     },
   },
   {
     name: 'submit_visual_recognition',
-    description: 'Görsel tanıma testinin sonuçlarını kaydeder.',
+    description: 'Gorsel tanima testinin tamamlanmis ve backend tarafinda dogrulanmis sonuclarini kaydeder. Tum gorseller kapanmadan cagirmazsin.',
     parameters: {
       type: 'object',
       properties: {
@@ -481,6 +492,11 @@ class GeminiLiveSession {
     this.isConnected = false;
     this.brainAgent = null; // Brain Agent dışarıdan set edilir
     this.language = normalizeLanguage(options.language);
+    this.cameraPermissionGate = {
+      active: false,
+      heldFunctionResponses: [],
+      waitingSince: null,
+    };
   }
 
   async connect() {
@@ -589,6 +605,10 @@ class GeminiLiveSession {
     if (content.outputTranscription) {
       const text = content.outputTranscription.text;
       log.debug('Output transcription', { sessionId: this.sessionId, text: text?.substring(0, 80) });
+      if (this.cameraPermissionGate.active) {
+        log.info('Camera gate active - output transcription suppressed', { sessionId: this.sessionId });
+        return;
+      }
       if (this.brainAgent && text) {
         this.brainAgent.onTranscript('agent', text);
       }
@@ -598,6 +618,10 @@ class GeminiLiveSession {
     // Audio response ve text parçaları
     if (content.modelTurn && content.modelTurn.parts) {
       for (const part of content.modelTurn.parts) {
+        if (this.cameraPermissionGate.active) {
+          log.info('Camera gate active - model output suppressed', { sessionId: this.sessionId });
+          continue;
+        }
         if (part.inlineData) {
           this.sendToClient({
             type: 'audio',
@@ -679,6 +703,15 @@ class GeminiLiveSession {
       // ("Request contains an invalid argument" → session close)
       const sanitizedResult = this._sanitizeToolResponseForGemini(result);
 
+      if (fc.name === 'start_video_analysis' && result?.awaitingClientPermission) {
+        this._holdCameraPermissionToolResponse({
+          name: fc.name,
+          id: fc.id,
+          response: sanitizedResult,
+        });
+        continue;
+      }
+
       functionResponses.push({
         name: fc.name,
         id: fc.id,
@@ -687,7 +720,7 @@ class GeminiLiveSession {
     }
 
     // Sanitize edilmiş tool response'u Gemini'ye gönder
-    if (this.geminiSession && this.isConnected) {
+    if (this.geminiSession && this.isConnected && functionResponses.length > 0) {
       try {
         this.geminiSession.sendToolResponse({ functionResponses });
       } catch (error) {
@@ -754,7 +787,56 @@ class GeminiLiveSession {
     return logSafe;
   }
 
+  _holdCameraPermissionToolResponse(functionResponse) {
+    if (!this.cameraPermissionGate.active) {
+      this.cameraPermissionGate.active = true;
+      this.cameraPermissionGate.waitingSince = Date.now();
+      this.sendToClient({ type: 'interrupted' });
+      this.sendToClient({
+        type: 'camera_permission_required',
+        status: 'pending',
+        message: pickText(
+          this.language,
+          'Kamera izni bekleniyor. Test 4 yazilimsal olarak duraklatildi; izin gelmeden ajan ilerlemeyecek.',
+          'Camera permission is pending. Test 4 is paused in software; the agent will not continue until access is granted.'
+        ),
+      });
+      log.info('Camera permission gate activated', { sessionId: this.sessionId });
+    }
+
+    this.cameraPermissionGate.heldFunctionResponses.push(functionResponse);
+  }
+
+  resumeCameraPermissionGate() {
+    if (!this.cameraPermissionGate.active) {
+      return false;
+    }
+
+    const functionResponses = [...this.cameraPermissionGate.heldFunctionResponses];
+    this.cameraPermissionGate.active = false;
+    this.cameraPermissionGate.heldFunctionResponses = [];
+    this.cameraPermissionGate.waitingSince = null;
+
+    if (this.geminiSession && this.isConnected && functionResponses.length > 0) {
+      try {
+        this.geminiSession.sendToolResponse({ functionResponses });
+        log.info('Camera permission gate released', {
+          sessionId: this.sessionId,
+          responseCount: functionResponses.length,
+        });
+        return true;
+      } catch (error) {
+        log.error('Camera gate release failed', { sessionId: this.sessionId, error: error.message });
+      }
+    }
+
+    return false;
+  }
+
   sendAudio(audioData) {
+    if (this.cameraPermissionGate.active) {
+      return;
+    }
     if (this.geminiSession && this.isConnected) {
       this.geminiSession.sendRealtimeInput({
         audio: {
@@ -763,6 +845,13 @@ class GeminiLiveSession {
         },
       });
     }
+  }
+
+  sendUserText(text) {
+    if (this.cameraPermissionGate.active) {
+      return;
+    }
+    this.sendText(text);
   }
 
   sendText(text) {
@@ -788,6 +877,9 @@ class GeminiLiveSession {
       this.geminiSession = null;
     }
     this.isConnected = false;
+    this.cameraPermissionGate.active = false;
+    this.cameraPermissionGate.heldFunctionResponses = [];
+    this.cameraPermissionGate.waitingSince = null;
   }
 }
 
