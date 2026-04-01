@@ -15,8 +15,17 @@ import CameraModal from '../components/CameraModal';
 
 const log = createLogger('AgentSession');
 
+const TRANSITION_MAP = {
+  transition_test1: { nextKey: 'verbal_fluency', prevDoneUpTo: -1 },
+  transition_test2: { nextKey: 'story_recall', prevDoneUpTo: 0 },
+  transition_test3: { nextKey: 'visual_recognition', prevDoneUpTo: 1 },
+  transition_test4: { nextKey: 'orientation', prevDoneUpTo: 2 },
+};
+
 function getTestIndex(currentTest, testSteps) {
   if (!currentTest) return -1;
+  const trans = TRANSITION_MAP[currentTest];
+  if (trans) return testSteps.findIndex(s => s.key === trans.nextKey);
   const base = currentTest.replace('_done', '');
   return testSteps.findIndex(s => s.key === base);
 }
@@ -24,6 +33,11 @@ function getTestIndex(currentTest, testSteps) {
 function isTestDone(currentTest, stepKey, testSteps) {
   if (!currentTest) return false;
   if (currentTest === 'all_done') return true;
+  const trans = TRANSITION_MAP[currentTest];
+  if (trans) {
+    const stepIdx = testSteps.findIndex(s => s.key === stepKey);
+    return stepIdx <= trans.prevDoneUpTo;
+  }
   const currentIdx = getTestIndex(currentTest, testSteps);
   const stepIdx = testSteps.findIndex(s => s.key === stepKey);
   if (currentTest.endsWith('_done')) return stepIdx <= currentIdx;
@@ -33,8 +47,14 @@ function isTestDone(currentTest, stepKey, testSteps) {
 function isTestActive(currentTest, stepKey) {
   if (!currentTest) return false;
   if (currentTest === 'all_done') return false;
+  const trans = TRANSITION_MAP[currentTest];
+  if (trans) return false;
   const base = currentTest.replace('_done', '');
   return base === stepKey && !currentTest.endsWith('_done');
+}
+
+function isTransition(currentTest) {
+  return currentTest && TRANSITION_MAP[currentTest] != null;
 }
 
 function formatDuration(totalSeconds) {
@@ -196,7 +216,7 @@ export default function AgentSession() {
               style={{
                 width: gemini.currentTest === 'all_done'
                   ? '80%' 
-                  : `${Math.max(0, (getTestIndex(gemini.currentTest, TEST_STEPS) + (gemini.currentTest?.endsWith('_done') ? 1 : 0.5)) / TEST_STEPS.length) * 80}%`
+                  : `${Math.max(0, (getTestIndex(gemini.currentTest, TEST_STEPS) + (gemini.currentTest?.endsWith('_done') ? 1 : isTransition(gemini.currentTest) ? 0 : 0.5)) / TEST_STEPS.length) * 80}%`
               }}
             />
             

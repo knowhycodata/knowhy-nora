@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { translations } from '../i18n/translations';
 
-const DEFAULT_LANGUAGE = 'tr';
+const DEFAULT_LANGUAGE = 'en';
 const SUPPORTED_LANGUAGES = ['tr', 'en'];
 const LANGUAGE_STORAGE_KEY = 'app_language';
 
@@ -34,9 +34,6 @@ function detectInitialLanguage() {
   if (storedRaw) {
     return normalizeLanguage(storedRaw);
   }
-
-  const browserLang = (navigator.language || '').toLowerCase();
-  if (browserLang.startsWith('en')) return 'en';
   return DEFAULT_LANGUAGE;
 }
 
@@ -104,4 +101,3 @@ export function useLanguage() {
   }
   return context;
 }
-

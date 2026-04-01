@@ -15,7 +15,7 @@ function PrivateRoute({ children }) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-950">
         <div className="animate-breathe">
-          <BrandMark size="xl" className="shadow-[0_18px_44px_rgba(255,255,255,0.08)]" />
+          <BrandMark size="xl" />
         </div>
       </div>
     );

@@ -1,0 +1,16 @@
+{
+  "name": "Nöra",
+  "short_name": "Nöra",
+  "description": "Voice-based cognitive screening and short reports",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fcfbf7",
+  "theme_color": "#fcfbf7",
+  "icons": [
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

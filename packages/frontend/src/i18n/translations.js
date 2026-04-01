@@ -1,7 +1,7 @@
 export const translations = {
   tr: {
     common: {
-      appName: 'Nora',
+      appName: 'Nöra',
       login: 'Giriş Yap',
       register: 'Kayıt Ol',
       dashboard: 'Panel',
@@ -21,7 +21,7 @@ export const translations = {
       badge: 'Sesli ajan ile kısa bilişsel tarama',
       titleLine1: 'Konuşun,',
       titleLine2: 'kısa bir rapor alın',
-      description: 'Nora size kısa sorular sorar, dört mini testi konuşma akışı içinde uygular ve birkaç dakika içinde anlaşılır bir değerlendirme sunar.',
+      description: 'Nöra size kısa sorular sorar, dört mini testi konuşma akışı içinde uygular ve birkaç dakika içinde anlaşılır bir değerlendirme sunar.',
       startScan: 'Taramaya Başla',
       metaTests: '4 kısa test',
       metaLanguages: 'TR / EN',
@@ -55,7 +55,8 @@ export const translations = {
       benefit3Title: 'Sade ve anlaşılır',
       benefit3Desc: 'Kısa metinler ve net yönlendirmelerle sürece hızlı uyum sağlarsınız.',
       medicalNote: 'Bu tarama tıbbi teşhis yerine geçmez; bilgilendirme ve takip amacıyla sunulur.',
-      footer: 'Knowhy - bilişsel tarama deneyimi',
+      footerLabel: 'knowhy - Nöra',
+      footerLink: 'knowhy.co',
     },
     auth: {
       loginTitle: 'Giriş Yap',
@@ -214,7 +215,7 @@ export const translations = {
   },
   en: {
     common: {
-      appName: 'Nora',
+      appName: 'Nöra',
       login: 'Sign In',
       register: 'Sign Up',
       dashboard: 'Dashboard',
@@ -234,7 +235,7 @@ export const translations = {
       badge: 'Short cognitive screening with a voice agent',
       titleLine1: 'Talk first,',
       titleLine2: 'get a short report next',
-      description: 'Nora asks brief questions, runs four short checks inside a natural conversation, and prepares a clear summary within minutes.',
+      description: 'Nöra asks brief questions, runs four short checks inside a natural conversation, and prepares a clear summary within minutes.',
       startScan: 'Start Screening',
       metaTests: '4 short checks',
       metaLanguages: 'TR / EN',
@@ -268,7 +269,8 @@ export const translations = {
       benefit3Title: 'Calm and readable',
       benefit3Desc: 'Short copy and simple screens keep the experience easy to follow.',
       medicalNote: 'This screening is not a medical diagnosis; it is provided for informational follow-up.',
-      footer: 'Knowhy - cognitive screening experience',
+      footerLabel: 'knowhy - Nöra',
+      footerLink: 'knowhy.co',
     },
     auth: {
       loginTitle: 'Sign In',
@@ -290,7 +292,7 @@ export const translations = {
     },
     dashboard: {
       title: 'Cognitive Screening',
-      subtitle: 'Start voice interaction with Nora. Duration: up to 8 minutes.',
+      subtitle: 'Start voice interaction with Nöra. Duration: up to 8 minutes.',
       start: 'Start Screening',
       noSessions: 'No screening sessions yet.',
       sessions: 'Past Sessions',
@@ -311,8 +313,8 @@ export const translations = {
       assistantSubtitle: 'Cognitive Screening Assistant',
       transcript: 'Transcript',
       end: 'End',
-      connecting: 'Connecting to Nora...',
-      speaking: 'Nora is speaking...',
+      connecting: 'Connecting to Nöra...',
+      speaking: 'Nöra is speaking...',
       listening: 'Listening...',
       ready: 'Ready',
       timerActiveTitle: 'Timer is running',
@@ -347,7 +349,7 @@ export const translations = {
       emptyTitle: 'No transcript yet',
       emptySubtitle: 'When conversation starts, sentences will appear here live',
       user: 'You',
-      agent: 'Nora',
+      agent: 'Nöra',
       flowing: 'streaming',
     },
     visualPanel: {

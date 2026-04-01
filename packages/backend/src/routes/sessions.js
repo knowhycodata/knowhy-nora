@@ -147,10 +147,10 @@ router.get('/:id/pdf', authenticate, async (req, res) => {
       return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
     }
 
-    const language = req.query.lang || 'tr';
+    const language = req.query.lang || 'en';
     const pdfBuffer = await generatePdfReport(session, user, language);
 
-    const filename = `nora-report-${session.id.substring(0, 8)}.pdf`;
+    const filename = `nöra-report-${session.id.substring(0, 8)}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', pdfBuffer.length);

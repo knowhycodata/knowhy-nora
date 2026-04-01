@@ -640,6 +640,19 @@ export function useGeminiLive() {
         markSessionCompleted('session_completed_event');
         break;
         
+      case 'test_phase_change':
+        log.info('Test phase change', { phase: message.phase, message: message.message });
+        if (message.phase?.startsWith('TRANSITION_TO_')) {
+          setCurrentTest(`transition_${message.phase.replace('TRANSITION_TO_', '').toLowerCase()}`);
+        } else if (message.phase === 'ORIENTATION_ACTIVE') {
+          setCurrentTest('orientation');
+        } else if (message.phase === 'STORY_RECALL_ACTIVE') {
+          setCurrentTest('story_recall');
+        } else if (message.phase === 'VISUAL_TEST_ACTIVE') {
+          setCurrentTest('visual_recognition');
+        }
+        break;
+
       case 'timer_started':
         log.info('Timer started', { timerId: message.timerId, duration: message.durationSeconds });
         timerActiveRef.current = true;

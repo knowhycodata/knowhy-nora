@@ -295,11 +295,19 @@ async function handleVerbalFluency({ sessionId, words, targetLetter, durationSec
     log.warn('submit_verbal_fluency engellendi - timer hala aktif', { sessionId });
 
     if (typeof brainAgent.sendTextToLive === 'function') {
+      const elapsed = brainAgent.timerStartTime ? Math.floor((Date.now() - brainAgent.timerStartTime) / 1000) : '?';
+      const remaining = brainAgent.timerStartTime ? Math.max(0, brainAgent.timerDuration - elapsed) : '?';
       brainAgent.sendTextToLive(
         pickText(
           language,
-          'VERBAL_FLUENCY_GUARD: Timer hala aktif. submit_verbal_fluency cagrisini iptal et. Kullaniciyi dinlemeye devam et ve sadece TIMER_COMPLETE/TIMER_STOPPED mesaji geldikten sonra submit_verbal_fluency cagir.',
-          'VERBAL_FLUENCY_GUARD: The timer is still active. Cancel this submit_verbal_fluency call. Keep listening to the user and call submit_verbal_fluency only after a TIMER_COMPLETE/TIMER_STOPPED message.'
+          `VERBAL_FLUENCY_GUARD: TIMER HALA AKTIF (${remaining} saniye kaldi)! ` +
+            'submit_verbal_fluency cagrisi REDDEDILDI. Test 1 BITMEDI. ' +
+            'HEMEN kullaniciya "Afedersiniz, sureniz hala devam ediyor. Kelime soylemeye devam edebilirsiniz" de. ' +
+            '"Tebrikler" veya "tamamladiniz" deme. Sadece TIMER_COMPLETE/TIMER_STOPPED mesaji geldikten sonra submit_verbal_fluency cagir.',
+          `VERBAL_FLUENCY_GUARD: TIMER IS STILL ACTIVE (${remaining} seconds left)! ` +
+            'submit_verbal_fluency call was REJECTED. Test 1 is NOT finished. ' +
+            'IMMEDIATELY tell the user "Sorry, your time is still running. You can keep saying words." ' +
+            'Do NOT say "congratulations" or "completed". Only call submit_verbal_fluency after TIMER_COMPLETE/TIMER_STOPPED message.'
         )
       );
     }

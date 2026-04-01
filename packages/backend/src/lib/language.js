@@ -1,5 +1,5 @@
 const SUPPORTED_LANGUAGES = ['tr', 'en'];
-const DEFAULT_LANGUAGE = 'tr';
+const DEFAULT_LANGUAGE = 'en';
 
 function normalizeLanguage(input) {
   if (typeof input !== 'string') return DEFAULT_LANGUAGE;

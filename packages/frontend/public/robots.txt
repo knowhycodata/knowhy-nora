@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://nora.knowhy.app/sitemap.xml

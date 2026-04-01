@@ -243,7 +243,16 @@ export default function Landing() {
       </main>
 
       <footer className="relative z-10 border-t border-[rgba(20,33,29,0.08)] py-7 text-center text-xs tracking-[0.14em] text-[#7a8b84]">
-        {t('landing.footer')}
+        <span>{t('landing.footerLabel')}</span>
+        <span className="mx-2 text-[#9aa8a2]">/</span>
+        <a
+          href="https://knowhy.co"
+          target="_blank"
+          rel="noreferrer"
+          className="font-medium text-[#5b6c64] transition hover:text-[#14211d]"
+        >
+          {t('landing.footerLink')}
+        </a>
       </footer>
     </div>
   );

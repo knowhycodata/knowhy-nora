@@ -27,30 +27,48 @@ const KEYWORDS = {
   ],
   userReady: [
     'hazır', 'hazir', 'evet', 'başla', 'basla', 'tamam', 'olur', 'tabii',
-    'ready', 'yes', 'start', 'okay', 'ok', 'sure',
+    'hazırım', 'hazirim', 'devam', 'devam edelim', 'geçelim', 'gecelim',
+    'başlayalım', 'baslayalim', 'gidebiliriz', 'hadi',
+    'ready', 'yes', 'start', 'okay', 'ok', 'sure', "let's go",
+    "i'm ready", 'im ready', 'go ahead', 'continue', "let's continue",
+  ],
+  userNotReady: [
+    'kötü', 'kotu', 'iyi değil', 'iyi degil', 'yorgun', 'hasta', 'korkuyorum',
+    'tedirgin', 'gergin', 'endişeli', 'endiseli', 'bilmiyorum', 'emin değilim',
+    'emin degilim', 'biraz bekle', 'bir dakika', 'dur', 'hayır', 'hayir',
+    'not good', 'tired', 'scared', 'nervous', 'anxious', "i don't know",
+    'not sure', 'wait', 'no', 'hold on', 'not ready',
   ],
   userStop: [
-    'durdur', 'duralım', 'duralim', 'bitirelim', 'yeter', 'kafi', 'tamam bitti',
-    'bitir', 'bitirdim', 'bitti', 'tamamladım', 'tamamladim', 'tamamdır',
-    'kalmadı', 'kalmadi', 'gelmiyor', 'aklıma gelmiyor', 'aklima gelmiyor',
-    'daha yok', 'stop', 'dur', 'bırak', 'birak', 'yetişir', 'yetisir',
+    'durdur', 'duralım', 'duralim', 'bitirelim', 'tamam bitti',
+    'bitirdim', 'tamamladım', 'tamamladim', 'tamamdır',
+    'aklıma gelmiyor', 'aklima gelmiyor',
     'bu kadar', 'artık yeter', 'artik yeter', 'daha fazla yok', 'başka yok',
-    'baska yok', 'o kadar', 'bitsin', 'bitiyor', 'durduralım', 'durduralim',
+    'baska yok', 'o kadar', 'durduralım', 'durduralim',
     'süreyi durdur', 'sureyi durdur',
-    'finish', 'stop now', 'enough', 'that is enough', 'i am done', "i'm done",
+    'stop now', 'that is enough', 'i am done', "i'm done",
     'no more words', "i can't think of more", 'nothing else',
     'thats all', "that's all", "that's it", 'thats it', 'i am finished',
-    "i'm finished", 'finished', 'done now', 'i have no more', 'no more',
+    "i'm finished", 'done now', 'i have no more',
     'cannot think of more', "can't remember more", 'cant remember more',
     'bu kadar yeter', 'daha fazla soyleyemiyorum', 'baska soyleyemiyorum',
+    'testi bitir', 'testi bitirelim', 'yeter artik', 'yeter artık',
   ],
   dangerWhileTimer: [
     'hikaye', 'test 2', 'ikinci test', 'testi tamamladınız', 'testi tamamladiniz',
     'bitirdiniz', 'story', 'second test', 'you completed the first test',
+    'tamamladınız', 'tamamladiniz', 'tebrikler', 'tebrik', 'ilk testi',
+    'first test', 'congratulations', 'completed', 'well done',
+    'aferin', 'bravo', 'başarılı', 'basarili', 'sonuç', 'sonuc',
+    'güzel kelimeler', 'guzel kelimeler', 'nice words',
+    'test bitti', 'test is over', 'test is done', 'test is complete',
+    'süre bitti', 'sure bitti', 'süreniz bitti', 'sureniz bitti',
+    'time is up', "time's up", 'timer is over',
   ],
   storyStart: [
     'hikaye', 'hikaye hatirlama', 'kısa bir hikaye', 'kisa bir hikaye',
-    'dikkatle dinleyin', 'story', 'story recall', 'listen carefully',
+    'dikkatle dinleyin', 'ikinci test', 'ikinci testimiz', 'ikinci teste',
+    'story', 'story recall', 'listen carefully', 'second test',
   ],
   storyRecallPrompt: [
     'hatırladığınız', 'hatirladiginiz', 'anlatır mısınız', 'anlatir misiniz',
@@ -135,9 +153,9 @@ class BrainAgent {
     this.lastUserSpeechAt = null;
     this.lastProgressAt = null;
     this.inactivityWarningSent = false;
-    this.INACTIVITY_WARN_AFTER_MS = parsePositiveInt(process.env.TEST1_INACTIVITY_WARN_MS, 10000);
-    this.INACTIVITY_STOP_AFTER_MS = parsePositiveInt(process.env.TEST1_INACTIVITY_STOP_MS, 16000);
-    this.MIN_AUTO_STOP_ELAPSED_MS = parsePositiveInt(process.env.TEST1_AUTO_STOP_MIN_ELAPSED_MS, 20000);
+    this.INACTIVITY_WARN_AFTER_MS = parsePositiveInt(process.env.TEST1_INACTIVITY_WARN_MS, 15000);
+    this.INACTIVITY_STOP_AFTER_MS = parsePositiveInt(process.env.TEST1_INACTIVITY_STOP_MS, 30000);
+    this.MIN_AUTO_STOP_ELAPSED_MS = parsePositiveInt(process.env.TEST1_AUTO_STOP_MIN_ELAPSED_MS, 30000);
 
     // BUG-010: Test 2 (Story Recall) inactivity timeout
     this.storyRecallStartedAt = null;
@@ -148,6 +166,13 @@ class BrainAgent {
     this.storyRecallInactivityInterval = null;
     this.STORY_RECALL_WARN_MS = parsePositiveInt(process.env.TEST2_INACTIVITY_WARN_MS, 20000);
     this.STORY_RECALL_TIMEOUT_MS = parsePositiveInt(process.env.TEST2_INACTIVITY_TIMEOUT_MS, 45000);
+
+    // Transition agent state
+    this.transitionAttempts = 0;
+    this.MAX_TRANSITION_ATTEMPTS = 3;
+    this.transitionStartedAt = null;
+    this.TRANSITION_TIMEOUT_MS = parsePositiveInt(process.env.TRANSITION_TIMEOUT_MS, 60000);
+    this.transitionTimeoutHandle = null;
 
     this.agentBuffer = '';
     this.userBuffer = '';
@@ -196,6 +221,49 @@ class BrainAgent {
     this._analyzePhase(role, cleanText);
   }
 
+  onToolCall(toolName) {
+    if (toolName === 'generate_story' && ['VERBAL_FLUENCY_DONE', 'TRANSITION_TO_TEST2', 'IDLE'].includes(this.testPhase)) {
+      log.info('Faz geçişi (tool call): → STORY_RECALL_ACTIVE', { sessionId: this.sessionId, toolName, from: this.testPhase });
+      this.testPhase = 'STORY_RECALL_ACTIVE';
+      this.storyRecallAgentDone = false;
+      this.storyRecallLastAgentAt = Date.now();
+      if (this._storyRecallWatcherFallbackTimeout) clearTimeout(this._storyRecallWatcherFallbackTimeout);
+      this._storyRecallWatcherFallbackTimeout = setTimeout(() => {
+        if (this.testPhase === 'STORY_RECALL_ACTIVE' && !this.storyRecallAgentDone) {
+          log.warn('Story Recall watcher fallback (tool call path)', { sessionId: this.sessionId });
+          this.storyRecallAgentDone = true;
+          this._startStoryRecallWatcher();
+        }
+      }, 60000);
+    } else if (toolName === 'submit_story_recall') {
+      log.info('submit_story_recall tool call - TRANSITION_TO_TEST3 hazırlığı', { sessionId: this.sessionId, from: this.testPhase });
+      this._stopStoryRecallWatcher();
+      // Kisa gecikme sonrasi transition fazina gec
+      setTimeout(() => {
+        if (this.testPhase === 'STORY_RECALL_ACTIVE' || this.testPhase === 'VERBAL_FLUENCY_DONE') {
+          log.info('Faz geçişi: → TRANSITION_TO_TEST3', { sessionId: this.sessionId });
+          this._enterTransition('TRANSITION_TO_TEST3');
+        }
+      }, 2000);
+    } else if (toolName === 'start_visual_test' && !['VISUAL_TEST_ACTIVE'].includes(this.testPhase) && 
+               ['STORY_RECALL_DONE', 'TRANSITION_TO_TEST3', 'STORY_RECALL_ACTIVE', 'VERBAL_FLUENCY_DONE', 'IDLE'].includes(this.testPhase)) {
+      log.info('Faz geçişi (tool call): → VISUAL_TEST_ACTIVE', { sessionId: this.sessionId, toolName, from: this.testPhase });
+      this.testPhase = 'VISUAL_TEST_ACTIVE';
+      this._stopStoryRecallWatcher();
+    } else if (toolName === 'submit_visual_recognition') {
+      log.info('submit_visual_recognition tool call - TRANSITION_TO_TEST4 hazırlığı', { sessionId: this.sessionId, from: this.testPhase });
+      setTimeout(() => {
+        if (this.testPhase === 'VISUAL_TEST_ACTIVE' || this.testPhase === 'VISUAL_TEST_DONE') {
+          log.info('Faz geçişi: → TRANSITION_TO_TEST4', { sessionId: this.sessionId });
+          this._enterTransition('TRANSITION_TO_TEST4');
+        }
+      }, 2000);
+    } else if (toolName === 'submit_orientation') {
+      log.info('Faz geçişi (tool call): → ORIENTATION_DONE', { sessionId: this.sessionId, toolName });
+      this.testPhase = 'ORIENTATION_DONE';
+    }
+  }
+
   _analyzePhase(role, text) {
     const rawText = text;
     const agentBuf = this.agentBuffer;
@@ -204,6 +272,12 @@ class BrainAgent {
     switch (this.testPhase) {
       case 'IDLE':
         this._handleIdle(role, rawText, agentBuf);
+        break;
+      case 'TRANSITION_TO_TEST1':
+      case 'TRANSITION_TO_TEST2':
+      case 'TRANSITION_TO_TEST3':
+      case 'TRANSITION_TO_TEST4':
+        this._handleTransition(role, rawText, userBuf);
         break;
       case 'VERBAL_FLUENCY_WAITING':
         this._handleWaiting(role, rawText, agentBuf, userBuf);
@@ -214,6 +288,8 @@ class BrainAgent {
       case 'VERBAL_FLUENCY_DONE':
       case 'STORY_RECALL_ACTIVE':
         this._handlePostTest1(role, rawText, agentBuf);
+        break;
+      case 'STORY_RECALL_DONE':
         break;
       case 'VISUAL_TEST_ACTIVE':
         this._handleVisualTestActive(role, rawText, text);
@@ -232,11 +308,213 @@ class BrainAgent {
   _handleIdle(role, text, agentBuf) {
     if (role !== 'agent') return;
     if (this._containsAny(agentBuf, KEYWORDS.verbalIntro) || this._containsAny(text, KEYWORDS.verbalIntro)) {
-      log.info('Faz geçişi: IDLE → VERBAL_FLUENCY_WAITING', { sessionId: this.sessionId });
+      log.info('Faz geçişi: IDLE → VERBAL_FLUENCY_WAITING (agent test açıklaması algılandı)', { sessionId: this.sessionId });
       this.testPhase = 'VERBAL_FLUENCY_WAITING';
       this._tryExtractLetter(agentBuf);
       this._tryExtractLetter(text);
     }
+  }
+
+  // ─── TRANSITION AGENT ─────────────────────────────────────────
+  _enterTransition(targetPhase) {
+    this.testPhase = targetPhase;
+    this.transitionAttempts = 0;
+    this.transitionStartedAt = Date.now();
+    this._transitionAdvancing = false;
+
+    if (this.transitionTimeoutHandle) clearTimeout(this.transitionTimeoutHandle);
+    this.transitionTimeoutHandle = setTimeout(() => {
+      if (this.testPhase === targetPhase) {
+        log.warn('Transition timeout - zorla ilerleniyor', { sessionId: this.sessionId, phase: targetPhase });
+        this._advanceFromTransition();
+      }
+    }, this.TRANSITION_TIMEOUT_MS);
+
+    const testName = this._transitionTargetName(targetPhase);
+    log.info(`Transition fazı başladı: ${targetPhase}`, { sessionId: this.sessionId, testName });
+
+    this.sendToClient({
+      type: 'test_phase_change',
+      phase: targetPhase,
+      message: pickText(this.language,
+        `${testName} için hazırlık`,
+        `Preparing for ${testName}`),
+    });
+  }
+
+  _handleTransition(role, text, userBuf) {
+    if (role !== 'user') return;
+    if (this._transitionAdvancing) return;
+
+    const combined = `${text} ${userBuf}`;
+    const isReady = this._containsAny(combined, KEYWORDS.userReady);
+    const isNotReady = this._containsAny(combined, KEYWORDS.userNotReady);
+
+    if (isReady) {
+      log.info('Kullanıcı hazır - transition tamamlanıyor', {
+        sessionId: this.sessionId,
+        phase: this.testPhase,
+        attempts: this.transitionAttempts,
+      });
+      this._advanceFromTransition();
+      return;
+    }
+
+    if (isNotReady) {
+      this.transitionAttempts += 1;
+      log.info('Kullanıcı hazır değil - teşvik gönderiliyor', {
+        sessionId: this.sessionId,
+        phase: this.testPhase,
+        attempt: this.transitionAttempts,
+      });
+
+      if (this.transitionAttempts >= this.MAX_TRANSITION_ATTEMPTS) {
+        this.sendTextToLive(
+          pickText(
+            this.language,
+            'TRANSITION_NUDGE: Kullanıcı birkaç kez hazır olmadığını belirtti. ' +
+              'Nazikce "Sizin tempönüze saygı duyuyorum ama devam etmemiz gerekiyor. ' +
+              'Endişelenmeyin, çok kısa ve basit olacak." de ve sonraki teste başla.',
+            'TRANSITION_NUDGE: The user has expressed not being ready multiple times. ' +
+              'Gently say "I respect your pace but we need to continue. ' +
+              'Don\'t worry, it will be quick and simple." and start the next test.'
+          )
+        );
+        setTimeout(() => {
+          if (this.testPhase.startsWith('TRANSITION_')) {
+            this._advanceFromTransition();
+          }
+        }, 8000);
+        return;
+      }
+
+      const encouragements = this.language === 'tr'
+        ? [
+          'TRANSITION_SUPPORT: Kullanıcı kendini iyi hissetmiyor veya hazır değil. ' +
+            'Empatik ol: "Anlıyorum, acele etmeyelim. Kendinizi hazır hissettiğinizde devam ederiz. ' +
+            'Test çok kısa ve kolay, endişelenmenize gerek yok." de. Hazır olup olmadığını tekrar sor.',
+          'TRANSITION_SUPPORT: Kullanıcı hala tereddütlü. "Gayet normal, birçok kişi benzer hissediyor. ' +
+            'Sadece birkaç basit soru, yanlış cevap diye bir şey yok. Hazır mısınız?" de.',
+        ]
+        : [
+          'TRANSITION_SUPPORT: The user is not feeling well or not ready. ' +
+            'Be empathetic: "I understand, no rush. We\'ll continue when you feel ready. ' +
+            'The test is very short and easy, nothing to worry about." Ask if they are ready again.',
+          'TRANSITION_SUPPORT: The user is still hesitant. "That\'s completely normal, many people feel the same. ' +
+            'Just a few simple questions, there are no wrong answers. Are you ready?" ',
+        ];
+      const idx = Math.min(this.transitionAttempts - 1, encouragements.length - 1);
+      this.sendTextToLive(encouragements[idx]);
+    }
+  }
+
+  _advanceFromTransition() {
+    this._transitionAdvancing = true;
+
+    if (this.transitionTimeoutHandle) {
+      clearTimeout(this.transitionTimeoutHandle);
+      this.transitionTimeoutHandle = null;
+    }
+
+    const phase = this.testPhase;
+    switch (phase) {
+      case 'TRANSITION_TO_TEST1':
+        log.info('Transition → VERBAL_FLUENCY_WAITING', { sessionId: this.sessionId });
+        this.testPhase = 'VERBAL_FLUENCY_WAITING';
+        this.sendToClient({
+          type: 'test_phase_change',
+          phase: 'VERBAL_FLUENCY_WAITING',
+          message: pickText(this.language, 'Sözel akıcılık testi başlıyor', 'Verbal fluency test starting'),
+        });
+        this.sendTextToLive(
+          pickText(
+            this.language,
+            'TRANSITION_READY: Kullanıcı hazır. Şimdi Test 1 (Sözel Akıcılık) testini açıkla ve başlat. ' +
+              'Bir harf seç ve kuralları anlat.',
+            'TRANSITION_READY: The user is ready. Now explain and start Test 1 (Verbal Fluency). ' +
+              'Pick a letter and explain the rules.'
+          )
+        );
+        break;
+
+      case 'TRANSITION_TO_TEST2':
+        log.info('Transition → VERBAL_FLUENCY_DONE (generate_story bekleniyor)', { sessionId: this.sessionId });
+        this.testPhase = 'VERBAL_FLUENCY_DONE';
+        this.sendToClient({
+          type: 'test_phase_change',
+          phase: 'STORY_RECALL_ACTIVE',
+          message: pickText(this.language, 'Hikaye hatırlama testi başlıyor', 'Story recall test starting'),
+        });
+        this.sendTextToLive(
+          pickText(
+            this.language,
+            'TRANSITION_READY: Kullanıcı ikinci test için hazır. ' +
+              'Şimdi Test 2 (Hikaye Hatırlama) testini açıkla: "Size kısa bir hikaye anlatacağım, dikkatle dinleyin." ' +
+              'Sonra HEMEN generate_story() fonksiyonunu çağır. Hikayeyi kendin UYDURMA.',
+            'TRANSITION_READY: The user is ready for Test 2. ' +
+              'Explain Test 2 (Story Recall): "I will tell you a short story, listen carefully." ' +
+              'Then IMMEDIATELY call generate_story(). Do NOT make up a story yourself.'
+          )
+        );
+        break;
+
+      case 'TRANSITION_TO_TEST3':
+        log.info('Transition → STORY_RECALL_DONE (start_visual_test bekleniyor)', { sessionId: this.sessionId });
+        this.testPhase = 'STORY_RECALL_DONE';
+        this.sendToClient({
+          type: 'test_phase_change',
+          phase: 'VISUAL_TEST_ACTIVE',
+          message: pickText(this.language, 'Görsel tanıma testi başlıyor', 'Visual recognition test starting'),
+        });
+        this.sendTextToLive(
+          pickText(
+            this.language,
+            'TRANSITION_READY: Kullanıcı üçüncü test için hazır. ' +
+              'Şimdi Test 3 (Görsel Tanıma) testini açıkla: "Ekranınıza sırayla görseller göstereceğim, ne olduğunu söylemenizi isteyeceğim." ' +
+              'Sonra HEMEN start_visual_test() fonksiyonunu çağır.',
+            'TRANSITION_READY: The user is ready for Test 3. ' +
+              'Explain Test 3 (Visual Recognition): "I will show images on your screen, tell me what you see." ' +
+              'Then IMMEDIATELY call start_visual_test().'
+          )
+        );
+        break;
+
+      case 'TRANSITION_TO_TEST4':
+        log.info('Transition → ORIENTATION_ACTIVE', { sessionId: this.sessionId });
+        this.testPhase = 'ORIENTATION_ACTIVE';
+        this.orientationUserInputBuffer = '';
+        this.orientationLastUserAt = 0;
+        this.sendToClient({
+          type: 'test_phase_change',
+          phase: 'ORIENTATION_ACTIVE',
+          message: pickText(this.language, 'Yönelim testi başlıyor', 'Orientation test starting'),
+        });
+        this.sendTextToLive(
+          pickText(
+            this.language,
+            'TRANSITION_READY: Kullanıcı son test için hazır. ' +
+              'Şimdi Test 4 (Yönelim) testini başlat. ' +
+              'Kullanıcıya zaman ve mekânla ilgili 7 soru sor (yıl, ay, gün, mevsim, şehir, ülke, bulunduğu yer).',
+            'TRANSITION_READY: The user is ready for the last test. ' +
+              'Now start Test 4 (Orientation). ' +
+              'Ask the user 7 questions about time and place (year, month, day, season, city, country, current location).'
+          )
+        );
+        break;
+
+      default:
+        log.warn('Bilinmeyen transition fazı', { sessionId: this.sessionId, phase });
+    }
+  }
+
+  _transitionTargetName(phase) {
+    const map = {
+      TRANSITION_TO_TEST1: pickText(this.language, 'Sözel Akıcılık Testi', 'Verbal Fluency Test'),
+      TRANSITION_TO_TEST2: pickText(this.language, 'Hikaye Hatırlama Testi', 'Story Recall Test'),
+      TRANSITION_TO_TEST3: pickText(this.language, 'Görsel Tanıma Testi', 'Visual Recognition Test'),
+      TRANSITION_TO_TEST4: pickText(this.language, 'Yönelim Testi', 'Orientation Test'),
+    };
+    return map[phase] || phase;
   }
 
   _handleWaiting(role, text, agentBuf) {
@@ -264,11 +542,17 @@ class BrainAgent {
   _handleActive(role, text, rawText, userBuf = '') {
     if (role === 'user') {
       this.lastUserSpeechAt = Date.now();
-      if (this._containsAny(text, KEYWORDS.userStop) || this._containsAny(userBuf, KEYWORDS.userStop)) {
-        log.info('Stop sinyali algılandı', { sessionId: this.sessionId, text });
+
+      const elapsed = this.timerStartTime ? Date.now() - this.timerStartTime : 0;
+      const MIN_ELAPSED_FOR_USER_STOP = 15000;
+
+      if (elapsed >= MIN_ELAPSED_FOR_USER_STOP &&
+          (this._containsAny(text, KEYWORDS.userStop) || this._containsAny(userBuf, KEYWORDS.userStop))) {
+        log.info('Stop sinyali algılandı', { sessionId: this.sessionId, text, elapsedMs: elapsed });
         this._stopTimer('user_stop');
         return;
       }
+
       const addedWords = this._collectWords(rawText);
       if (addedWords > 0) {
         this.lastProgressAt = Date.now();
@@ -277,20 +561,34 @@ class BrainAgent {
       return;
     }
 
-    if (role === 'agent' && this.timerActive && this._containsAny(text, KEYWORDS.dangerWhileTimer)) {
-      log.warn('Ajan timer aktifken test geçişi yapmaya çalışıyor - uyarı gönder', {
-        sessionId: this.sessionId,
-        text: text.substring(0, 60),
-      });
-      const elapsed = Math.floor((Date.now() - this.timerStartTime) / 1000);
-      const remaining = this.timerDuration - elapsed;
-      this.sendTextToLive(
-        pickText(
-          this.language,
-          `UYARI: Timer hala aktif. ${remaining} saniye kaldi. Test 1 devam ediyor. Kullaniciya beklemesi icin alan tanimaya devam et ve Test 2'ye gecme.`,
-          `WARNING: The timer is still active. ${remaining} seconds left. Test 1 is still running. Keep waiting for user words and do not move to Test 2.`
-        )
-      );
+    if (role === 'agent' && this.timerActive) {
+      const dangerInText = this._containsAny(text, KEYWORDS.dangerWhileTimer);
+      const dangerInBuf = this._containsAny(this.agentBuffer, KEYWORDS.dangerWhileTimer);
+      if (dangerInText || dangerInBuf) {
+        const elapsed = Math.floor((Date.now() - this.timerStartTime) / 1000);
+        const remaining = this.timerDuration - elapsed;
+        log.warn('KRITIK: Ajan timer aktifken test bitirmeye/gecise calisiyor', {
+          sessionId: this.sessionId,
+          elapsed,
+          remaining,
+          text: text.substring(0, 80),
+          agentBuf: this.agentBuffer.substring(0, 80),
+        });
+        this.agentBuffer = '';
+        this.sendTextToLive(
+          pickText(
+            this.language,
+            `KRITIK_UYARI: TIMER HALA AKTIF! ${remaining} saniye kaldi. ` +
+              'Test 1 DEVAM EDIYOR. "Tebrikler" veya "tamamladiniz" gibi ifadeler kullanma! ' +
+              'Testi bitirme yetkisi sende DEGIL. Sadece TIMER_COMPLETE veya TIMER_STOPPED mesaji gelince testi bitirebilirsin. ' +
+              'Simdi kullaniciya "Sureniz devam ediyor, kelime soylemeye devam edebilirsiniz" de.',
+            `CRITICAL_WARNING: TIMER IS STILL ACTIVE! ${remaining} seconds left. ` +
+              'Test 1 is STILL RUNNING. Do NOT say "congratulations" or "completed"! ' +
+              'You do NOT have authority to end the test. Only TIMER_COMPLETE or TIMER_STOPPED message can end it. ' +
+              'Now tell the user "Your time is still running, you can keep saying words."'
+          )
+        );
+      }
     }
   }
 
@@ -408,15 +706,24 @@ class BrainAgent {
         `${prefix}: ${isTimeout ? '60 saniyelik sure doldu.' : stopReasonTextTr} ` +
           `Kullanicinin soyledigi kelimeler: [${wordList}]. Toplam ${this.collectedWords.length} kelime. ` +
           `Simdi submit_verbal_fluency fonksiyonunu cagir. words: [${wordJson}], targetLetter: "${letter}", sessionId: "${this.sessionId}", durationSeconds: ${elapsed}. ` +
-          'submit_verbal_fluency cagirdiktan sonra kullaniciya ikinci teste hazir olup olmadigini sor ve onay bekle.',
+          'submit_verbal_fluency cagirdiktan sonra kullaniciya "Tebrikler, ilk testi tamamladınız!" de. ' +
+          'Sonra nasıl hissettiğini sor ve ikinci teste hazır olup olmadığını sor. Onay bekle.',
         `${prefix}: ${isTimeout ? 'The 60-second timer is over.' : stopReasonTextEn} ` +
           `User words: [${wordList}]. Total ${this.collectedWords.length} words. ` +
           `Now call submit_verbal_fluency with words: [${wordJson}], targetLetter: "${letter}", sessionId: "${this.sessionId}", durationSeconds: ${elapsed}. ` +
-          'After submit_verbal_fluency, ask whether the user is ready for Test 2 and wait for explicit confirmation.'
+          'After submit_verbal_fluency, say "Congratulations on completing the first test!" ' +
+          'Then ask how they feel and whether they are ready for Test 2. Wait for explicit confirmation.'
       )
     );
 
     this.testPhase = 'VERBAL_FLUENCY_DONE';
+    // Kisa gecikme sonrasi transition fazina gec
+    setTimeout(() => {
+      if (this.testPhase === 'VERBAL_FLUENCY_DONE') {
+        log.info('Faz geçişi: VERBAL_FLUENCY_DONE → TRANSITION_TO_TEST2', { sessionId: this.sessionId });
+        this._enterTransition('TRANSITION_TO_TEST2');
+      }
+    }, 2000);
   }
 
   _startInactivityWatcher() {
@@ -468,42 +775,13 @@ class BrainAgent {
   }
 
   _handlePostTest1(role, text, agentBuf) {
-    if (role !== 'agent') return;
-
-    // Test 1'den Test 2'ye geçiş
-    if (this.testPhase === 'VERBAL_FLUENCY_DONE' && this._containsAny(agentBuf, KEYWORDS.storyStart)) {
-      log.info('Faz geçişi: VERBAL_FLUENCY_DONE → STORY_RECALL_ACTIVE', { sessionId: this.sessionId });
-      this.testPhase = 'STORY_RECALL_ACTIVE';
-      // Watcher'i hemen baslatma - ajan hikayeyi anlatirken interrupt olur.
-      // Watcher, ajan hikayeyi anlatip kullanicidan cevap istediginde baslatilacak.
-      // Bkz: KEYWORDS.storyRecallPrompt kontrolu asagida
-      this.storyRecallAgentDone = false;
-      this.storyRecallLastAgentAt = Date.now();
-      // Fallback: ajan 60sn icinde storyRecallPrompt keyword'u kullanmazsa zorla baslat
-      this._storyRecallWatcherFallbackTimeout = setTimeout(() => {
-        if (this.testPhase === 'STORY_RECALL_ACTIVE' && !this.storyRecallAgentDone) {
-          log.warn('Story Recall watcher fallback - keyword tespit edilemedi, zorla baslatiliyor', { sessionId: this.sessionId });
-          this.storyRecallAgentDone = true;
-          this._startStoryRecallWatcher();
-        }
-      }, 5000);
-      return;
-    }
-
     // Ajan hikayeyi anlatip kullanicidan cevap istedigini tespit et
-    if (this.testPhase === 'STORY_RECALL_ACTIVE' && !this.storyRecallAgentDone) {
+    if (role === 'agent' && this.testPhase === 'STORY_RECALL_ACTIVE' && !this.storyRecallAgentDone) {
       if (this._containsAny(text, KEYWORDS.storyRecallPrompt) || this._containsAny(agentBuf, KEYWORDS.storyRecallPrompt)) {
         log.info('Ajan hikayeyi anlatti, kullanicidan cevap bekliyor - watcher baslatiliyor', { sessionId: this.sessionId });
         this.storyRecallAgentDone = true;
         this._startStoryRecallWatcher();
       }
-    }
-
-    // Test 2'den Test 3'e geçiş - SADECE STORY_RECALL_ACTIVE fazındayken
-    if (this.testPhase === 'STORY_RECALL_ACTIVE' && this._containsAny(agentBuf, KEYWORDS.visualStart)) {
-      log.info('Faz geçişi: STORY_RECALL_ACTIVE → VISUAL_TEST_ACTIVE', { sessionId: this.sessionId });
-      this.testPhase = 'VISUAL_TEST_ACTIVE';
-      this._stopStoryRecallWatcher();
     }
   }
 
@@ -542,19 +820,13 @@ class BrainAgent {
   }
 
   _handlePostVisualTest(role, text, agentBuf) {
-    if (role !== 'agent') return;
-
-    if (this._containsAny(agentBuf, KEYWORDS.orientationStart) || this._containsAny(text, KEYWORDS.orientationStart)) {
-      log.info('Faz geçişi: VISUAL_TEST_DONE → ORIENTATION_ACTIVE', { sessionId: this.sessionId });
-      this.testPhase = 'ORIENTATION_ACTIVE';
-      this.orientationUserInputBuffer = '';
-      this.orientationLastUserAt = 0;
-
-      this.sendToClient({
-        type: 'test_phase_change',
-        phase: 'ORIENTATION_ACTIVE',
-        message: pickText(this.language, 'Yonelim testi basliyor', 'Orientation test is starting'),
-      });
+    // Transition yapisi artik tool call (submit_visual_recognition) ve _enterTransition uzerinden calisiyor.
+    // Keyword fallback: eger tool call uzerinden transition baslatilmadiysa
+    if (role === 'agent' && this.testPhase === 'VISUAL_TEST_DONE') {
+      if (this._containsAny(agentBuf, KEYWORDS.orientationStart) || this._containsAny(text, KEYWORDS.orientationStart)) {
+        log.info('Faz geçişi (keyword fallback): VISUAL_TEST_DONE → TRANSITION_TO_TEST4', { sessionId: this.sessionId });
+        this._enterTransition('TRANSITION_TO_TEST4');
+      }
     }
   }
 
@@ -646,8 +918,14 @@ class BrainAgent {
       this.sendTextToLive(
         pickText(
           this.language,
-          'STORY_RECALL_TIMEOUT: Kullanici uzun suredir sessiz. Hikaye hatirlama testini mevcut bilgiyle tamamla. Eger kullanici hicbir sey soylemediyse bos cevap olarak submit_story_recall cagir. Sonra Test 3e gec.',
-          'STORY_RECALL_TIMEOUT: The user has been silent for too long. Complete the story recall test with available info. If user said nothing, call submit_story_recall with empty response. Then move to Test 3.'
+          'STORY_RECALL_TIMEOUT: Kullanici uzun suredir sessiz. Hikaye hatirlama testini mevcut bilgiyle tamamla. ' +
+            'Eger kullanici hicbir sey soylemediyse bos cevap olarak submit_story_recall cagir. ' +
+            'submit_story_recall cagirdiktan sonra kullaniciya "Tebrikler, ikinci testi tamamladınız!" de ve nasil hissettigini sor. ' +
+            'Ucuncu teste hazir olup olmadigini sor, onay bekle.',
+          'STORY_RECALL_TIMEOUT: The user has been silent for too long. Complete the story recall test with available info. ' +
+            'If user said nothing, call submit_story_recall with empty response. ' +
+            'After submit_story_recall, say "Congratulations on completing the second test!" and ask how they feel. ' +
+            'Ask if they are ready for Test 3. Wait for confirmation.'
         )
       );
     }
@@ -663,6 +941,7 @@ class BrainAgent {
 
   destroy() {
     if (this.timerTimeout) clearTimeout(this.timerTimeout);
+    if (this.transitionTimeoutHandle) clearTimeout(this.transitionTimeoutHandle);
     this._stopInactivityWatcher();
     this._stopStoryRecallWatcher();
     if (this._storyRecallWatcherFallbackTimeout) {

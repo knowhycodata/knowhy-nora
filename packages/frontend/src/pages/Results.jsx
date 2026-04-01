@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import api from '../lib/api';
+import BrandMark from '../components/BrandMark';
 import { getBlobApiErrorMessage } from '../lib/apiErrors';
 
 export default function Results() {
@@ -34,7 +35,7 @@ export default function Results() {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `nora-report-${id.substring(0, 8)}.pdf`;
+      link.download = `nöra-report-${id.substring(0, 8)}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -108,9 +109,7 @@ export default function Results() {
       <header className="border-b border-gray-100 px-6 py-4 bg-white">
         <div className="container mx-auto flex items-center justify-between max-w-3xl">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gray-900 flex items-center justify-center">
-              <span className="text-white text-sm font-semibold">N</span>
-            </div>
+            <BrandMark size="sm" />
             <span className="text-lg font-semibold tracking-tight text-gray-900">{t('results.title')}</span>
           </div>
           <Link
