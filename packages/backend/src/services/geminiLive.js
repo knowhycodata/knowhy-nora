@@ -7,7 +7,7 @@
  * Mimari: Browser ↔ WS ↔ Node.js Backend ↔ Gemini Live API
  */
 
-const { GoogleGenAI, Modality } = require('@google/genai');
+const { GoogleGenAI, Modality, StartSensitivity, EndSensitivity } = require('@google/genai');
 const { createLogger } = require('../lib/logger');
 const { normalizeLanguage, isEnglish, pickText } = require('../lib/language');
 
@@ -570,6 +570,15 @@ class GeminiLiveSession {
             },
           },
         },
+        realtimeInputConfig: {
+          automaticActivityDetection: {
+            disabled: false,
+            startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_LOW,
+            endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_LOW,
+            prefixPaddingMs: 40,
+            silenceDurationMs: 300,
+          },
+        },
         systemInstruction: {
           parts: [{ text: buildSystemInstruction(this.language) }],
         },
@@ -701,11 +710,13 @@ class GeminiLiveSession {
 
     // Turn complete
     if (content.turnComplete) {
+      log.debug('Turn complete', { sessionId: this.sessionId });
       this.sendToClient({ type: 'turn_complete' });
     }
 
-    // Interrupted
+    // Interrupted - kullanici ajanin sozunu kesti
     if (content.interrupted) {
+      log.info('Agent interrupted by user', { sessionId: this.sessionId, phase: this.brainAgent?.testPhase });
       this.sendToClient({ type: 'interrupted' });
     }
   }

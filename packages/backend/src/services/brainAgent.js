@@ -164,8 +164,8 @@ class BrainAgent {
     this.storyRecallAgentDone = false;
     this.storyRecallWarningSent = false;
     this.storyRecallInactivityInterval = null;
-    this.STORY_RECALL_WARN_MS = parsePositiveInt(process.env.TEST2_INACTIVITY_WARN_MS, 20000);
-    this.STORY_RECALL_TIMEOUT_MS = parsePositiveInt(process.env.TEST2_INACTIVITY_TIMEOUT_MS, 45000);
+    this.STORY_RECALL_WARN_MS = parsePositiveInt(process.env.TEST2_INACTIVITY_WARN_MS, 35000);
+    this.STORY_RECALL_TIMEOUT_MS = parsePositiveInt(process.env.TEST2_INACTIVITY_TIMEOUT_MS, 60000);
 
     // Transition agent state
     this.transitionAttempts = 0;
