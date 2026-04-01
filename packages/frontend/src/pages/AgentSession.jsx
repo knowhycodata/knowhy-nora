@@ -9,6 +9,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { useGeminiLive, SESSION_STATES } from '../hooks/useGeminiLive';
 import { createLogger } from '../lib/logger';
 import api from '../lib/api';
+import BrandMark from '../components/BrandMark';
 import GeneratedImagePanel from '../components/GeneratedImagePanel';
 import CameraModal from '../components/CameraModal';
 
@@ -34,6 +35,13 @@ function isTestActive(currentTest, stepKey) {
   if (currentTest === 'all_done') return false;
   const base = currentTest.replace('_done', '');
   return base === stepKey && !currentTest.endsWith('_done');
+}
+
+function formatDuration(totalSeconds) {
+  const safeSeconds = Math.max(0, Number(totalSeconds) || 0);
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
 export default function AgentSession() {
@@ -73,6 +81,15 @@ export default function AgentSession() {
       return () => clearTimeout(t);
     }
   }, [gemini.state, gemini.sessionId, navigate]);
+
+  useEffect(() => {
+    if (!gemini.sessionTimeout) return;
+    setShowEndConfirm(false);
+    const redirectTimer = setTimeout(() => {
+      navigate(gemini.sessionTimeout.redirectTo || '/dashboard', { replace: true });
+    }, 3500);
+    return () => clearTimeout(redirectTimer);
+  }, [gemini.sessionTimeout, navigate]);
 
   const handleEnd = useCallback(() => {
     setShowEndConfirm(true);
@@ -143,9 +160,7 @@ export default function AgentSession() {
       {/* ─── Üst Bar ─── */}
       <header className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white">
         <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gray-900 flex items-center justify-center">
-              <span className="text-white text-sm font-semibold">N</span>
-            </div>
+          <BrandMark size="sm" />
           <div>
             <h1 className="text-sm font-semibold text-gray-900">{t('common.appName')}</h1>
             <p className="text-[11px] text-gray-400">{t('agentSession.assistantSubtitle')}</p>
@@ -153,6 +168,14 @@ export default function AgentSession() {
         </div>
 
         <div className="flex items-center gap-2">
+          {gemini.sessionLimit && (
+            <div className="hidden sm:flex items-center gap-2 rounded-full border border-amber-100 bg-amber-50 px-3 py-2 text-amber-700">
+              <span className="text-[11px] font-medium">{t('agentSession.sessionLimitLabel')}</span>
+              <span className="text-xs font-semibold tabular-nums">
+                {formatDuration(gemini.sessionLimit.remainingSeconds)}
+              </span>
+            </div>
+          )}
           <button
             onClick={handleEnd}
             className="px-4 py-2 rounded-lg text-sm text-gray-500 hover:text-red-500 hover:bg-red-50 transition-all"
@@ -430,6 +453,32 @@ export default function AgentSession() {
                 className="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-red-600 hover:bg-red-700 transition"
               >
                 {t('agentSession.endConfirmOk')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {gemini.sessionTimeout && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-xl border border-amber-100 p-6 max-w-md mx-4 w-full">
+            <div className="flex items-center justify-center w-12 h-12 rounded-full bg-amber-50 mx-auto mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 6v6l4 2" />
+                <circle cx="12" cy="12" r="9" />
+              </svg>
+            </div>
+            <h3 className="text-base font-semibold text-gray-900 text-center">{t('agentSession.sessionTimeoutTitle')}</h3>
+            <p className="mt-2 text-sm text-gray-500 text-center">{gemini.sessionTimeout.message}</p>
+            <p className="mt-3 text-xs text-amber-700 text-center">
+              {t('agentSession.sessionTimeoutRedirectHint')}
+            </p>
+            <div className="mt-5">
+              <button
+                onClick={() => navigate(gemini.sessionTimeout.redirectTo || '/dashboard', { replace: true })}
+                className="w-full px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-gray-900 hover:bg-gray-800 transition"
+              >
+                {t('agentSession.sessionTimeoutAction')}
               </button>
             </div>
           </div>

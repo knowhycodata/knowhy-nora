@@ -107,6 +107,8 @@ export function useGeminiLive() {
   // Timer state
   const [timer, setTimer] = useState(null); // { duration, remaining, testType, active }
   const timerActiveRef = useRef(false); // BUG-009 FIX: race condition guard
+  const [sessionLimit, setSessionLimit] = useState(null); // { durationSeconds, remainingSeconds, expiresAt, active }
+  const [sessionTimeout, setSessionTimeout] = useState(null);
   
   // Camera / Video Analysis state
   const [cameraActive, setCameraActive] = useState(false);
@@ -136,6 +138,7 @@ export function useGeminiLive() {
   const audioMeterFrameRef = useRef(null);
   const completionLockedRef = useRef(false);
   const sessionLanguageRef = useRef('tr');
+  const terminalCloseReasonRef = useRef(null);
 
   // State ref'ini güncel tut
   useEffect(() => {
@@ -308,6 +311,7 @@ export function useGeminiLive() {
     if (completionLockedRef.current) return;
 
     completionLockedRef.current = true;
+    terminalCloseReasonRef.current = 'completed';
     log.info('Session completed lock acquired', { source });
 
     setCurrentTest('all_done');
@@ -318,6 +322,12 @@ export function useGeminiLive() {
     setVideoAnalysisResult(null);
     setCameraPresence(null);
     setCameraAccessError(null);
+    setSessionTimeout(null);
+    setSessionLimit((prev) => (
+      prev
+        ? { ...prev, active: false, remainingSeconds: Math.max(0, prev.remainingSeconds ?? 0) }
+        : prev
+    ));
 
     stopMic();
     clearAudioBuffer();
@@ -326,6 +336,49 @@ export function useGeminiLive() {
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'end_session' }));
     }
+  }, [stopMic, clearAudioBuffer]);
+
+  const markSessionExpired = useCallback((payload = {}) => {
+    if (terminalCloseReasonRef.current === 'expired') return;
+
+    terminalCloseReasonRef.current = 'expired';
+    timerActiveRef.current = false;
+    log.warn('Session expired lock acquired', payload);
+
+    stopMic();
+    clearAudioBuffer();
+
+    setState(SESSION_STATES.ERROR);
+    setError(null);
+    setIsSpeaking(false);
+    setCurrentTest(null);
+    setGeneratedImage(null);
+    setImageGenerating(false);
+    setCameraActive(false);
+    setCameraCommand(null);
+    setVideoAnalysisResult(null);
+    setCameraPresence(null);
+    setCameraAccessError(null);
+    setTimer((prev) => (prev ? { ...prev, active: false, remaining: 0 } : prev));
+    setSessionLimit((prev) => {
+      const durationSeconds = payload.durationSeconds || prev?.durationSeconds || 8 * 60;
+      return {
+        durationSeconds,
+        remainingSeconds: 0,
+        expiresAt: prev?.expiresAt || null,
+        active: false,
+      };
+    });
+    setSessionTimeout({
+      reason: payload.reason || 'MAX_DURATION_REACHED',
+      durationSeconds: payload.durationSeconds || 8 * 60,
+      message: payload.message || pickText(
+        sessionLanguageRef.current,
+        'Bu tarama oturumu 8 dakikalik ust limite ulasti ve hard olarak sonlandirildi.',
+        'This screening session reached the 8-minute hard limit and was terminated.'
+      ),
+      redirectTo: payload.redirectTo || '/dashboard',
+    });
   }, [stopMic, clearAudioBuffer]);
 
   // ─── WebSocket Message Handler (ref-safe) ───────────────────────
@@ -356,6 +409,18 @@ export function useGeminiLive() {
         if (message.language) {
           sessionLanguageRef.current = normalizeLanguage(message.language);
         }
+        if (message.sessionDurationSeconds) {
+          const expiresAt = message.sessionExpiresAt
+            ? Date.parse(message.sessionExpiresAt)
+            : Date.now() + message.sessionDurationSeconds * 1000;
+          setSessionLimit({
+            durationSeconds: message.sessionDurationSeconds,
+            remainingSeconds: Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000)),
+            expiresAt,
+            active: true,
+          });
+        }
+        setSessionTimeout(null);
         setState(SESSION_STATES.ACTIVE);
         break;
 
@@ -550,10 +615,20 @@ export function useGeminiLive() {
         // Session kapandı — ama COMPLETED state'ine sadece complete_session ile geçilmeli
         // "Request contains an invalid argument" gibi beklenmedik kapanmalarda
         // kullanıcıya hata göster
-        if (!completionLockedRef.current && stateRef.current !== SESSION_STATES.COMPLETED) {
+        if (
+          !completionLockedRef.current &&
+          terminalCloseReasonRef.current !== 'expired' &&
+          stateRef.current !== SESSION_STATES.COMPLETED
+        ) {
           log.warn('Session closed unexpectedly');
           // Bağlantı hatası olarak işaretle ama mevcut verileri koru
         }
+        break;
+      case 'session_expired':
+        if (message.sessionId && !sessionId) {
+          setSessionId(message.sessionId);
+        }
+        markSessionExpired(message);
         break;
       case 'session_ended':
         markSessionCompleted('session_ended');
@@ -674,6 +749,7 @@ export function useGeminiLive() {
   const connectAndStart = useCallback(async (token, options = {}) => {
     log.info('connectAndStart called', { hasToken: !!token, wsExists: !!wsRef.current });
     completionLockedRef.current = false;
+    terminalCloseReasonRef.current = null;
     sessionLanguageRef.current = normalizeLanguage(options.language);
     lastTokenRef.current = token;
     lastOptionsRef.current = options;
@@ -698,6 +774,8 @@ export function useGeminiLive() {
 
     setError(null);
     setCameraAccessError(null);
+    setSessionTimeout(null);
+    setSessionLimit(null);
     setState(SESSION_STATES.CONNECTING);
 
     // 1. Player'ı başlat (user gesture içinde olmalı)
@@ -737,10 +815,17 @@ export function useGeminiLive() {
     ws.onclose = (event) => {
       log.info('WebSocket closed', { code: event.code, reason: event.reason });
       wsRef.current = null;
+      const terminalCloseReason = terminalCloseReasonRef.current;
+      const isTerminalClose =
+        terminalCloseReason === 'completed' ||
+        terminalCloseReason === 'manual' ||
+        terminalCloseReason === 'expired';
 
       const isActiveSession = !completionLockedRef.current &&
+        !isTerminalClose &&
         stateRef.current !== SESSION_STATES.COMPLETED &&
-        stateRef.current !== SESSION_STATES.IDLE;
+        stateRef.current !== SESSION_STATES.IDLE &&
+        stateRef.current !== SESSION_STATES.ERROR;
 
       // Normal kapanma (1000) veya kullanıcı tarafından kapatma reconnect tetiklemez
       const isAbnormal = event.code !== 1000 && event.code !== 1005;
@@ -766,6 +851,8 @@ export function useGeminiLive() {
             connectAndStart(lastTokenRef.current, lastOptionsRef.current);
           }
         }, delay);
+      } else if (terminalCloseReason === 'expired') {
+        setState(SESSION_STATES.ERROR);
       } else if (!completionLockedRef.current && stateRef.current !== SESSION_STATES.COMPLETED) {
         if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
           log.error('Maksimum reconnect denemesi aşıldı');
@@ -782,7 +869,7 @@ export function useGeminiLive() {
     };
 
     ws.onerror = (err) => {
-      if (completionLockedRef.current) {
+      if (completionLockedRef.current || terminalCloseReasonRef.current === 'expired' || terminalCloseReasonRef.current === 'manual') {
         log.warn('WebSocket error after completion ignored');
         return;
       }
@@ -823,6 +910,7 @@ export function useGeminiLive() {
   }, []);
 
   const endSession = useCallback(() => {
+    terminalCloseReasonRef.current = 'manual';
     stopMic();
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -871,6 +959,7 @@ export function useGeminiLive() {
 
   const disconnect = useCallback(() => {
     completionLockedRef.current = false;
+    terminalCloseReasonRef.current = 'manual';
     reconnectAttemptsRef.current = 0;
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
@@ -902,6 +991,8 @@ export function useGeminiLive() {
     setError(null);
     setCameraAccessError(null);
     setTimer(null);
+    setSessionLimit(null);
+    setSessionTimeout(null);
     setInputLevel(0);
     setOutputLevel(0);
     setCameraActive(false);
@@ -934,6 +1025,25 @@ export function useGeminiLive() {
   }, [timer?.active]);
 
   useEffect(() => {
+    if (!sessionLimit?.active || !sessionLimit.expiresAt) return;
+
+    const interval = setInterval(() => {
+      setSessionLimit((prev) => {
+        if (!prev?.active || !prev.expiresAt) return prev;
+        const remainingSeconds = Math.max(0, Math.ceil((prev.expiresAt - Date.now()) / 1000));
+        if (remainingSeconds === prev.remainingSeconds) return prev;
+        return {
+          ...prev,
+          remainingSeconds,
+          active: remainingSeconds > 0,
+        };
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [sessionLimit?.active, sessionLimit?.expiresAt]);
+
+  useEffect(() => {
     return () => {
       stopMic();
       if (playerCtxRef.current) playerCtxRef.current.close().catch(() => {});
@@ -948,6 +1058,8 @@ export function useGeminiLive() {
     generatedImage,
     imageGenerating,
     error: error || cameraAccessError,
+    sessionLimit,
+    sessionTimeout,
     isRecording,
     isSpeaking,
     inputLevel,

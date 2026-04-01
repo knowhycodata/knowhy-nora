@@ -28,6 +28,11 @@ const log = createLogger('Server');
 const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 3001;
+const SESSION_MAX_DURATION_MS = (() => {
+  const parsed = Number.parseInt(process.env.SESSION_MAX_DURATION_MS, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 8 * 60 * 1000;
+})();
+const SESSION_MAX_DURATION_SECONDS = Math.ceil(SESSION_MAX_DURATION_MS / 1000);
 
 function normalizeOrigin(origin) {
   if (typeof origin !== 'string') return null;
@@ -140,6 +145,134 @@ wss.on('connection', async (ws, req) => {
   let userId = null;
   let testSessionId = null;
   let sessionLanguage = 'tr';
+  let sessionTimeoutId = null;
+  let sessionCleanupDone = false;
+  let sessionExpired = false;
+
+  function clearSessionTimeoutTimer() {
+    if (sessionTimeoutId) {
+      clearTimeout(sessionTimeoutId);
+      sessionTimeoutId = null;
+    }
+  }
+
+  function cleanupSessionResources() {
+    if (sessionCleanupDone) return;
+    sessionCleanupDone = true;
+    clearSessionTimeoutTimer();
+
+    if (geminiSession) {
+      geminiSession.close();
+      geminiSession = null;
+    }
+
+    if (!testSessionId) {
+      return;
+    }
+
+    activeSessions.delete(testSessionId);
+    unregisterGeminiSession(testSessionId);
+    unregisterVisualTestAgent(testSessionId);
+    unregisterVideoAnalysisAgent(testSessionId);
+    unregisterCameraPresenceAgent(testSessionId);
+    unregisterBrainAgent(testSessionId);
+    unregisterDateTimeAgent(testSessionId);
+    unregisterSessionLanguage(testSessionId);
+    unregisterCameraAccessState(testSessionId);
+    clearPrefetchCache(testSessionId);
+  }
+
+  async function cancelSessionIfInProgress(reason = 'unknown') {
+    if (!testSessionId) return;
+
+    try {
+      const session = await prisma.testSession.findUnique({
+        where: { id: testSessionId },
+        select: { status: true },
+      });
+
+      if (session && session.status === 'IN_PROGRESS') {
+        await prisma.testSession.update({
+          where: { id: testSessionId },
+          data: { status: 'CANCELLED', completedAt: new Date() },
+        });
+        log.info('Session marked as CANCELLED', { clientId, testSessionId, reason });
+      }
+    } catch (err) {
+      log.error('Session CANCELLED guncelleme hatasi', {
+        clientId,
+        testSessionId,
+        reason,
+        error: err.message,
+      });
+    }
+  }
+
+  async function handleSessionTimeout() {
+    if (sessionExpired || !testSessionId) {
+      return;
+    }
+
+    sessionExpired = true;
+    clearSessionTimeoutTimer();
+
+    log.warn('Session hard timeout reached', {
+      clientId,
+      testSessionId,
+      durationSeconds: SESSION_MAX_DURATION_SECONDS,
+    });
+
+    await cancelSessionIfInProgress('MAX_DURATION_REACHED');
+
+    if (ws.readyState === 1) {
+      ws.send(JSON.stringify({ type: 'interrupted' }));
+      ws.send(JSON.stringify({
+        type: 'session_expired',
+        sessionId: testSessionId,
+        reason: 'MAX_DURATION_REACHED',
+        durationSeconds: SESSION_MAX_DURATION_SECONDS,
+        redirectTo: '/dashboard',
+        message: pickText(
+          sessionLanguage,
+          'Bu tarama oturumu en fazla 8 dakika surebilir. Sure doldugu icin oturum guvenlik ve maliyet kontrolu amaciyla sonlandirildi.',
+          'This screening session can last at most 8 minutes. The session was hard-stopped for safety and cost control because the time limit was reached.'
+        ),
+      }));
+    }
+
+    cleanupSessionResources();
+
+    if (ws.readyState === 1 || ws.readyState === 0) {
+      setTimeout(() => {
+        try {
+          if (ws.readyState === 1 || ws.readyState === 0) {
+            ws.close(4000, 'SESSION_EXPIRED');
+          }
+        } catch (error) {
+          log.warn('Session timeout socket close warning', {
+            clientId,
+            testSessionId,
+            error: error.message,
+          });
+        }
+      }, 120);
+    }
+  }
+
+  function scheduleSessionTimeout() {
+    clearSessionTimeoutTimer();
+    const expiresAt = new Date(Date.now() + SESSION_MAX_DURATION_MS);
+    sessionTimeoutId = setTimeout(() => {
+      handleSessionTimeout().catch((error) => {
+        log.error('Session timeout handling failed', {
+          clientId,
+          testSessionId,
+          error: error.message,
+        });
+      });
+    }, SESSION_MAX_DURATION_MS);
+    return expiresAt;
+  }
 
   ws.on('message', async (rawData) => {
     try {
@@ -291,12 +424,15 @@ wss.on('connection', async (ws, req) => {
             log.info('Connecting to Gemini Live...', { clientId, testSessionId });
             const connected = await geminiSession.connect();
             if (connected) {
+              const sessionExpiresAt = scheduleSessionTimeout();
               activeSessions.set(testSessionId, geminiSession);
               log.info('Gemini Live connected, session started', { clientId, testSessionId });
               ws.send(JSON.stringify({
                 type: 'session_started',
                 sessionId: testSessionId,
                 language: sessionLanguage,
+                sessionDurationSeconds: SESSION_MAX_DURATION_SECONDS,
+                sessionExpiresAt: sessionExpiresAt.toISOString(),
               }));
             } else {
               log.error('Gemini Live connection failed', { clientId, testSessionId });
@@ -383,28 +519,12 @@ wss.on('connection', async (ws, req) => {
           }
 
           case 'end_session': {
-            if (geminiSession) {
-              geminiSession.close();
-              activeSessions.delete(testSessionId);
-              unregisterGeminiSession(testSessionId);
-              unregisterVisualTestAgent(testSessionId);
-              unregisterVideoAnalysisAgent(testSessionId);
-              unregisterCameraPresenceAgent(testSessionId);
-              unregisterBrainAgent(testSessionId);
-              unregisterDateTimeAgent(testSessionId);
-              unregisterSessionLanguage(testSessionId);
-              unregisterCameraAccessState(testSessionId);
-              clearPrefetchCache(testSessionId);
-              geminiSession = null;
+            clearSessionTimeoutTimer();
+            await cancelSessionIfInProgress('USER_ENDED_SESSION');
+            if (ws.readyState === 1) {
+              ws.send(JSON.stringify({ type: 'session_ended' }));
             }
-            // FIX: DB'de session durumunu CANCELLED olarak güncelle
-            prisma.testSession.update({
-              where: { id: testSessionId },
-              data: { status: 'CANCELLED', completedAt: new Date() },
-            }).catch(err => {
-              log.error('Session CANCELLED güncelleme hatası', { testSessionId, error: err.message });
-            });
-            ws.send(JSON.stringify({ type: 'session_ended' }));
+            cleanupSessionResources();
             break;
           }
 
@@ -433,50 +553,22 @@ wss.on('connection', async (ws, req) => {
 
   ws.on('close', () => {
     log.info('WebSocket closed', { clientId, testSessionId });
-    if (geminiSession) {
-      geminiSession.close();
-      activeSessions.delete(testSessionId);
-      unregisterVisualTestAgent(testSessionId);
-      unregisterVideoAnalysisAgent(testSessionId);
-      unregisterCameraPresenceAgent(testSessionId);
-      unregisterBrainAgent(testSessionId);
-      unregisterDateTimeAgent(testSessionId);
-      unregisterSessionLanguage(testSessionId);
-      unregisterCameraAccessState(testSessionId);
-      clearPrefetchCache(testSessionId);
-    }
+    cleanupSessionResources();
     // FIX: WebSocket kapatıldığında DB'de session durumunu CANCELLED yap
     // AMA sadece session IN_PROGRESS ise (COMPLETED olanları değiştirme)
-    if (testSessionId) {
-      prisma.testSession.findUnique({ where: { id: testSessionId }, select: { status: true } })
-        .then(session => {
-          if (session && session.status === 'IN_PROGRESS') {
-            return prisma.testSession.update({
-              where: { id: testSessionId },
-              data: { status: 'CANCELLED', completedAt: new Date() },
-            });
-          }
-        })
-        .catch(err => {
-          log.error('Session CANCELLED güncelleme hatası (ws.close)', { testSessionId, error: err.message });
+    if (testSessionId && !sessionExpired) {
+      cancelSessionIfInProgress('WS_CLOSED').catch((err) => {
+        log.error('Session CANCELLED guncelleme hatasi (ws.close)', {
+          testSessionId,
+          error: err.message,
         });
+      });
     }
   });
 
   ws.on('error', (error) => {
     log.error('WebSocket error', { clientId, error: error.message });
-    if (geminiSession) {
-      geminiSession.close();
-      activeSessions.delete(testSessionId);
-      unregisterVisualTestAgent(testSessionId);
-      unregisterVideoAnalysisAgent(testSessionId);
-      unregisterCameraPresenceAgent(testSessionId);
-      unregisterBrainAgent(testSessionId);
-      unregisterDateTimeAgent(testSessionId);
-      unregisterSessionLanguage(testSessionId);
-      unregisterCameraAccessState(testSessionId);
-      clearPrefetchCache(testSessionId);
-    }
+    cleanupSessionResources();
   });
 });
 

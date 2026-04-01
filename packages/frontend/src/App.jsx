@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { LanguageProvider } from './context/LanguageContext';
+import BrandMark from './components/BrandMark';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -14,9 +15,7 @@ function PrivateRoute({ children }) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-950">
         <div className="animate-breathe">
-          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-            <span className="text-white text-xl font-bold">N</span>
-          </div>
+          <BrandMark size="xl" className="shadow-[0_18px_44px_rgba(255,255,255,0.08)]" />
         </div>
       </div>
     );

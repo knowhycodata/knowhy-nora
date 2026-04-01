@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import BrandMark from '../components/BrandMark';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import { getApiErrorMessage } from '../lib/apiErrors';
 
@@ -30,31 +31,32 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
+    <div className="page-shell relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10">
+      <div className="page-glow page-glow-left" />
+      <div className="page-glow page-glow-right" />
+
+      <div className="lift-in relative z-10 w-full max-w-sm">
+        <div className="mb-8 text-center">
           <div className="mb-4 flex items-center justify-center">
             <LanguageSwitcher compact />
           </div>
           <Link to="/" className="inline-flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gray-900 flex items-center justify-center">
-              <span className="text-white text-sm font-semibold">N</span>
-            </div>
-            <span className="text-lg font-semibold text-gray-900 tracking-tight">{t('common.appName')}</span>
+            <BrandMark size="md" />
+            <span className="text-lg font-semibold tracking-tight text-[#14211d]">{t('common.appName')}</span>
           </Link>
-          <h1 className="mt-8 text-xl font-semibold text-gray-900">{t('auth.loginTitle')}</h1>
-          <p className="mt-2 text-sm text-gray-500">{t('auth.loginSubtitle')}</p>
+          <h1 className="mt-8 text-2xl font-semibold tracking-tight text-[#14211d]">{t('auth.loginTitle')}</h1>
+          <p className="mt-2 text-sm leading-6 text-[#5b6c64]">{t('auth.loginSubtitle')}</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl p-7 space-y-5 border border-gray-100 shadow-sm">
+        <form onSubmit={handleSubmit} className="surface-card rounded-[28px] p-7 space-y-5">
           {error && (
-            <div className="p-3 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg">
+            <div className="rounded-2xl border border-red-100 bg-red-50 p-3 text-sm text-red-600">
               {error}
             </div>
           )}
 
           <div>
-            <label htmlFor="email" className="block text-xs font-medium text-gray-500 mb-1.5">
+            <label htmlFor="email" className="mb-1.5 block text-xs font-medium text-[#6d7d76]">
               {t('auth.email')}
             </label>
             <input
@@ -63,13 +65,13 @@ export default function Login() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-gray-200 focus:border-gray-400 outline-none transition"
+              className="surface-input w-full rounded-2xl px-4 py-3 text-sm text-[#14211d] placeholder:text-[#90a098] outline-none transition"
               placeholder={t('auth.sampleEmail')}
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-xs font-medium text-gray-500 mb-1.5">
+            <label htmlFor="password" className="mb-1.5 block text-xs font-medium text-[#6d7d76]">
               {t('auth.password')}
             </label>
             <div className="relative">
@@ -79,13 +81,13 @@ export default function Login() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-gray-200 focus:border-gray-400 outline-none transition pr-10"
+                className="surface-input w-full rounded-2xl px-4 py-3 pr-10 text-sm text-[#14211d] placeholder:text-[#90a098] outline-none transition"
                 placeholder="••••••••"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8ea097] transition hover:text-[#5f7068]"
               >
                 {showPassword ? (
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
@@ -99,10 +101,17 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 text-sm font-semibold text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            className="w-full rounded-2xl bg-[#14211d] py-3 text-sm font-semibold text-white transition-all hover:bg-[#22322c] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? t('auth.loginLoading') : t('common.login')}
           </button>
+
+          <p className="text-center text-sm text-[#6c7c75]">
+            {t('auth.noAccount')}{' '}
+            <Link to="/register" className="font-medium text-[#14211d] transition hover:text-[#3f5b4d]">
+              {t('common.register')}
+            </Link>
+          </p>
         </form>
       </div>
     </div>

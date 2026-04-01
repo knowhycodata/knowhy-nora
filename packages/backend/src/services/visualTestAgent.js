@@ -68,6 +68,7 @@ const TR_TO_EN_SUBJECT = {
 const INPUT_SETTLE_MS = 1800;
 const MAX_INVALID_ATTEMPTS = 2;
 const AGENT_GUARD_COOLDOWN_MS = 2500;
+const CONFIRM_SEND_DELAY_MS = 1200;
 
 const FILLER_ONLY_PHRASES = new Set([
   'hmm',
@@ -521,7 +522,7 @@ class VisualTestAgent {
     };
     this.state = VT_STATE.AWAITING_CONFIRMATION;
 
-    this.sendTextToLive(
+    this._delaySendTextToLive(
       pickText(
         this.language,
         `VISUAL_TEST_CONFIRM: Gorsel ${this.currentImageIndex + 1}/${this.testImages.length} icin kullanicinin aday cevabi "${candidate}". Sonraki gorsele gecme. Sadece "${candidate}" olarak kaydedeyim mi? diye sor ve net evet/hayir cevabi bekle. "Atla" komutunu kabul etme; kullanici isterse "bilmiyorum" diyebilir.`,
@@ -551,7 +552,7 @@ class VisualTestAgent {
     if (matchesAnyPattern(normalized, CONFIRM_NO_PATTERNS)) {
       this.pendingAnswerCandidate = null;
       this.state = VT_STATE.WAITING_CANDIDATE;
-      this.sendTextToLive(
+      this._delaySendTextToLive(
         pickText(
           this.language,
           `VISUAL_TEST_REASK: Gorsel ${this.currentImageIndex + 1}/${this.testImages.length} icin onceki cevap kaydedilmedi. Ayni gorselde kal ve kullanicidan sadece ne gordugunu tekrar soylemesini iste.`,
@@ -568,7 +569,7 @@ class VisualTestAgent {
       return;
     }
 
-    this.sendTextToLive(
+    this._delaySendTextToLive(
       pickText(
         this.language,
         `VISUAL_TEST_CONFIRM_RETRY: Gorsel ${this.currentImageIndex + 1}/${this.testImages.length} icin sadece evet, hayir veya bilmiyorum turu net bir cevap iste. Sonraki gorsele gecme.`,
@@ -616,7 +617,7 @@ class VisualTestAgent {
     };
     this.state = VT_STATE.READY_TO_RECORD;
 
-    this.sendTextToLive(
+    this._delaySendTextToLive(
       pickText(
         this.language,
         `VISUAL_TEST_RECORD_READY: Gorsel ${this.currentImageIndex + 1}/${this.testImages.length} icin kilitlenmis cevap "${answerText}". Simdi hemen record_visual_answer cagir. sessionId: "${this.sessionId}", imageIndex: ${this.currentImageIndex}, userAnswer: "${answerText}". Bu tool cagrisi olmadan sonraki gorsele veya submit_visual_recognition adimina gecme.`,
@@ -626,12 +627,20 @@ class VisualTestAgent {
   }
 
   async recordAnswer(imageIndex, userAnswer) {
-    const numericImageIndex = Number.isInteger(imageIndex)
+    // LLM halusinasyonuna karsi koruma: her zaman currentImageIndex'i kullan
+    const effectiveImageIndex = this.currentImageIndex;
+
+    const llmRequestedIndex = Number.isInteger(imageIndex)
       ? imageIndex
       : Number.parseInt(imageIndex, 10);
-    const effectiveImageIndex = Number.isInteger(numericImageIndex)
-      ? numericImageIndex
-      : this.currentImageIndex;
+
+    if (Number.isFinite(llmRequestedIndex) && llmRequestedIndex !== this.currentImageIndex) {
+      log.warn('LLM yanlis imageIndex gonderdi, currentImageIndex kullaniliyor', {
+        sessionId: this.sessionId,
+        llmRequestedIndex,
+        currentImageIndex: this.currentImageIndex,
+      });
+    }
 
     log.info('Visual record attempt', {
       sessionId: this.sessionId,
@@ -643,7 +652,7 @@ class VisualTestAgent {
     });
 
     const existingAnswer = this.answers.find((answer) => answer.imageIndex === effectiveImageIndex);
-    if (existingAnswer && effectiveImageIndex < this.currentImageIndex) {
+    if (existingAnswer) {
       return this._buildDuplicateRecordResult(existingAnswer);
     }
 
@@ -660,25 +669,21 @@ class VisualTestAgent {
       };
     }
 
-    if (effectiveImageIndex !== this.currentImageIndex) {
-      return {
-        success: false,
-        blocked: true,
-        reason: 'VISUAL_WRONG_IMAGE_ORDER',
-        message: pickText(
-          this.language,
-          `Su anda gorsel ${this.currentImageIndex + 1}/${this.testImages.length} aktif. Baska bir gorselin cevabi kaydedilemez.`,
-          `Image ${this.currentImageIndex + 1}/${this.testImages.length} is currently active. A different image cannot be recorded now.`
-        ),
-        currentImage: this.currentImageIndex + 1,
-      };
-    }
-
     if (!this.readyToRecordAnswer) {
       const reason =
         this.state === VT_STATE.AWAITING_CONFIRMATION
           ? 'AWAITING_VISUAL_CONFIRMATION'
           : 'NO_CONFIRMED_VISUAL_ANSWER';
+
+      // Blocked: LLM'e aktif geri bildirim gonder ki soru atlamasin
+      this._delaySendTextToLive(
+        pickText(
+          this.language,
+          `VISUAL_TEST_BLOCKED: record_visual_answer engellendi (${reason}). Gorsel ${this.currentImageIndex + 1}/${this.testImages.length} icin henuz onaylanmis cevap yok. Ayni gorselde kal, kullanicidan net cevap veya onay al. Sonraki gorsele veya teste GECME.`,
+          `VISUAL_TEST_BLOCKED: record_visual_answer was blocked (${reason}). Image ${this.currentImageIndex + 1}/${this.testImages.length} has no confirmed answer yet. Stay on the same image, get a clear answer or confirmation. Do NOT move to the next image or test.`
+        )
+      );
+
       return {
         success: false,
         blocked: true,
@@ -686,12 +691,14 @@ class VisualTestAgent {
         message: pickText(
           this.language,
           this.state === VT_STATE.AWAITING_CONFIRMATION
-            ? 'Cevap kilitlenmeden once net sesli onay alinmali.'
-            : 'Bu gorsel icin henuz onaylanmis bir cevap yok. Once kullanicidan net cevap veya "bilmiyorum" alin.',
+            ? `Gorsel ${this.currentImageIndex + 1}: Cevap kilitlenmeden once net sesli onay alinmali. Ayni gorselde kal.`
+            : `Gorsel ${this.currentImageIndex + 1}: Henuz onaylanmis bir cevap yok. Once kullanicidan net cevap veya "bilmiyorum" al. Ayni gorselde kal.`,
           this.state === VT_STATE.AWAITING_CONFIRMATION
-            ? 'A clear spoken confirmation is required before recording this answer.'
-            : 'There is no confirmed answer for this image yet. Get a clear answer or "I do not know" first.'
+            ? `Image ${this.currentImageIndex + 1}: A clear spoken confirmation is required before recording. Stay on the same image.`
+            : `Image ${this.currentImageIndex + 1}: No confirmed answer yet. Get a clear answer or "I do not know" first. Stay on the same image.`
         ),
+        currentImage: this.currentImageIndex + 1,
+        totalImages: this.testImages.length,
       };
     }
 
@@ -829,10 +836,22 @@ class VisualTestAgent {
 
   destroy() {
     this._clearBufferedInput();
+    if (this._pendingSendTimeout) {
+      clearTimeout(this._pendingSendTimeout);
+      this._pendingSendTimeout = null;
+    }
     this.isActive = false;
     this.pendingAnswerCandidate = null;
     this.readyToRecordAnswer = null;
     log.info('VisualTestAgent temizlendi', { sessionId: this.sessionId });
+  }
+
+  _delaySendTextToLive(text) {
+    if (this._pendingSendTimeout) clearTimeout(this._pendingSendTimeout);
+    this._pendingSendTimeout = setTimeout(() => {
+      this._pendingSendTimeout = null;
+      this.sendTextToLive(text);
+    }, CONFIRM_SEND_DELAY_MS);
   }
 
   _clearBufferedInput() {

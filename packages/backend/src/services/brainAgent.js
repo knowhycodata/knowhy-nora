@@ -52,6 +52,14 @@ const KEYWORDS = {
     'hikaye', 'hikaye hatirlama', 'kısa bir hikaye', 'kisa bir hikaye',
     'dikkatle dinleyin', 'story', 'story recall', 'listen carefully',
   ],
+  storyRecallPrompt: [
+    'hatırladığınız', 'hatirladiginiz', 'anlatır mısınız', 'anlatir misiniz',
+    'tekrar anlatın', 'tekrar anlatin', 'anlatmanızı', 'anlatmanizi',
+    'hatırladıklarınızı', 'hatirladiklarinizi', 'ne hatırlıyorsunuz', 'ne hatirliyorsunuz',
+    'siz anlatın', 'siz anlatin', 'şimdi sıra sizde', 'simdi sira sizde',
+    'can you retell', 'tell me what you remember', 'what do you remember',
+    'please retell', 'your turn to tell', 'now tell me',
+  ],
   visualStart: [
     'görsel tanıma', 'gorsel tanima', 'görsel test', 'gorsel test',
     'ekranınıza', 'ekraniniza', 'görsel göstereceğim', 'gorsel gosterecegim',
@@ -134,6 +142,8 @@ class BrainAgent {
     // BUG-010: Test 2 (Story Recall) inactivity timeout
     this.storyRecallStartedAt = null;
     this.storyRecallLastUserAt = null;
+    this.storyRecallLastAgentAt = null;
+    this.storyRecallAgentDone = false;
     this.storyRecallWarningSent = false;
     this.storyRecallInactivityInterval = null;
     this.STORY_RECALL_WARN_MS = parsePositiveInt(process.env.TEST2_INACTIVITY_WARN_MS, 20000);
@@ -156,6 +166,9 @@ class BrainAgent {
     const cleanText = text.trim();
     if (role === 'agent') {
       this.agentBuffer += ` ${cleanText}`;
+      if (this.testPhase === 'STORY_RECALL_ACTIVE') {
+        this.storyRecallLastAgentAt = Date.now();
+      }
     } else {
       this.userBuffer += ` ${cleanText}`;
       this._updateStoryRecallActivity();
@@ -457,15 +470,40 @@ class BrainAgent {
   _handlePostTest1(role, text, agentBuf) {
     if (role !== 'agent') return;
 
+    // Test 1'den Test 2'ye geçiş
     if (this.testPhase === 'VERBAL_FLUENCY_DONE' && this._containsAny(agentBuf, KEYWORDS.storyStart)) {
       log.info('Faz geçişi: VERBAL_FLUENCY_DONE → STORY_RECALL_ACTIVE', { sessionId: this.sessionId });
       this.testPhase = 'STORY_RECALL_ACTIVE';
-      this._startStoryRecallWatcher();
+      // Watcher'i hemen baslatma - ajan hikayeyi anlatirken interrupt olur.
+      // Watcher, ajan hikayeyi anlatip kullanicidan cevap istediginde baslatilacak.
+      // Bkz: KEYWORDS.storyRecallPrompt kontrolu asagida
+      this.storyRecallAgentDone = false;
+      this.storyRecallLastAgentAt = Date.now();
+      // Fallback: ajan 60sn icinde storyRecallPrompt keyword'u kullanmazsa zorla baslat
+      this._storyRecallWatcherFallbackTimeout = setTimeout(() => {
+        if (this.testPhase === 'STORY_RECALL_ACTIVE' && !this.storyRecallAgentDone) {
+          log.warn('Story Recall watcher fallback - keyword tespit edilemedi, zorla baslatiliyor', { sessionId: this.sessionId });
+          this.storyRecallAgentDone = true;
+          this._startStoryRecallWatcher();
+        }
+      }, 5000);
+      return;
     }
 
-    if (this._containsAny(agentBuf, KEYWORDS.visualStart) || this._containsAny(text, KEYWORDS.visualStart)) {
-      log.info('Faz geçişi: → VISUAL_TEST_ACTIVE', { sessionId: this.sessionId });
+    // Ajan hikayeyi anlatip kullanicidan cevap istedigini tespit et
+    if (this.testPhase === 'STORY_RECALL_ACTIVE' && !this.storyRecallAgentDone) {
+      if (this._containsAny(text, KEYWORDS.storyRecallPrompt) || this._containsAny(agentBuf, KEYWORDS.storyRecallPrompt)) {
+        log.info('Ajan hikayeyi anlatti, kullanicidan cevap bekliyor - watcher baslatiliyor', { sessionId: this.sessionId });
+        this.storyRecallAgentDone = true;
+        this._startStoryRecallWatcher();
+      }
+    }
+
+    // Test 2'den Test 3'e geçiş - SADECE STORY_RECALL_ACTIVE fazındayken
+    if (this.testPhase === 'STORY_RECALL_ACTIVE' && this._containsAny(agentBuf, KEYWORDS.visualStart)) {
+      log.info('Faz geçişi: STORY_RECALL_ACTIVE → VISUAL_TEST_ACTIVE', { sessionId: this.sessionId });
       this.testPhase = 'VISUAL_TEST_ACTIVE';
+      this._stopStoryRecallWatcher();
     }
   }
 
@@ -479,8 +517,27 @@ class BrainAgent {
     }
 
     if (role === 'agent' && this._containsAny(text, KEYWORDS.visualDone)) {
-      log.info('Faz geçişi: VISUAL_TEST_ACTIVE → VISUAL_TEST_DONE', { sessionId: this.sessionId });
-      this.testPhase = 'VISUAL_TEST_DONE';
+      // VisualTestAgent'in gercekten tamamlanip tamamlanmadigini kontrol et
+      // LLM'in erken gecis yapmasini engelle
+      const vtDone = this.visualTestAgent && !this.visualTestAgent.isTestActive;
+      if (vtDone) {
+        log.info('Faz geçişi: VISUAL_TEST_ACTIVE → VISUAL_TEST_DONE', { sessionId: this.sessionId });
+        this.testPhase = 'VISUAL_TEST_DONE';
+      } else {
+        log.warn('LLM erken VISUAL_TEST_DONE sinyali verdi ama VisualTestAgent hala aktif - engelleniyor', {
+          sessionId: this.sessionId,
+          vtState: this.visualTestAgent?.state || 'unknown',
+          answeredCount: this.visualTestAgent?.answers?.length || 0,
+        });
+        // LLM'e geri bildirim gonder
+        this.sendTextToLive(
+          pickText(
+            this.language,
+            'VISUAL_TEST_GUARD: Gorsel tanima testi henuz tamamlanmadi. Tum gorseller cevaplanmadan Test 4e gecme. Su anki gorselde kal ve devam et.',
+            'VISUAL_TEST_GUARD: Visual recognition test is NOT complete yet. Do not move to Test 4 until all images are answered. Stay on the current image.'
+          )
+        );
+      }
     }
   }
 
@@ -543,6 +600,10 @@ class BrainAgent {
       clearInterval(this.storyRecallInactivityInterval);
       this.storyRecallInactivityInterval = null;
     }
+    if (this._storyRecallWatcherFallbackTimeout) {
+      clearTimeout(this._storyRecallWatcherFallbackTimeout);
+      this._storyRecallWatcherFallbackTimeout = null;
+    }
   }
 
   _checkStoryRecallInactivity() {
@@ -551,7 +612,14 @@ class BrainAgent {
       return;
     }
 
+    // Ajan hala konusuyorsa (hikaye anlatiyorsa) inactivity sayma
+    // Son 5 saniye icinde ajan transcript geldiyse ajan aktif demektir
     const now = Date.now();
+    const agentRecentlySpoke = this.storyRecallLastAgentAt && (now - this.storyRecallLastAgentAt < 5000);
+    if (agentRecentlySpoke) {
+      return;
+    }
+
     const referenceTime = this.storyRecallLastUserAt || this.storyRecallStartedAt;
     if (!referenceTime) return;
 
@@ -597,6 +665,10 @@ class BrainAgent {
     if (this.timerTimeout) clearTimeout(this.timerTimeout);
     this._stopInactivityWatcher();
     this._stopStoryRecallWatcher();
+    if (this._storyRecallWatcherFallbackTimeout) {
+      clearTimeout(this._storyRecallWatcherFallbackTimeout);
+      this._storyRecallWatcherFallbackTimeout = null;
+    }
     if (this.bufferResetTimeout) clearTimeout(this.bufferResetTimeout);
     this.visualTestAgent = null;
     this.videoAnalysisAgent = null;

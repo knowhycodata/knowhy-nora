@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import BrandMark from '../components/BrandMark';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import api from '../lib/api';
 
@@ -54,9 +55,7 @@ export default function Dashboard() {
       <nav className="border-b border-gray-100">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gray-900 flex items-center justify-center">
-              <span className="text-white text-sm font-semibold">N</span>
-            </div>
+            <BrandMark size="sm" />
             <span className="text-lg font-semibold tracking-tight">{t('common.appName')}</span>
           </div>
           <div className="flex items-center gap-6">
