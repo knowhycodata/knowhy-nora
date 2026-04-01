@@ -523,8 +523,6 @@ async function handleRecordVisualAnswer({ sessionId, imageIndex, userAnswer }) {
     };
   }
 
-  // LLM'in gonderdigi userAnswer metni guvenilir kaynak degildir.
-  // Kayit yalnizca VisualTestAgent tarafinda kilitlenmis cevap varsa yapilir.
   const result = await agent.recordAnswer(imageIndex, userAnswer);
   return result;
 }
@@ -574,8 +572,8 @@ async function handleVisualRecognition({ sessionId, answers }) {
       reason: 'VISUAL_TEST_INCOMPLETE',
       message: pickText(
         language,
-        'Gorsel tanima testi henuz tamamlanmadi. Tum gorseller onayli cevap veya "bilmiyorum" ile kapanmadan submit_visual_recognition cagirilemez.',
-        'The visual recognition test is not complete yet. submit_visual_recognition cannot be called until all images are closed with a confirmed answer or "I do not know".'
+        'Gorsel tanima testi henuz tamamlanmadi. Tum gorseller record_visual_answer ile kapanmadan submit_visual_recognition cagirilemez.',
+        'The visual recognition test is not complete yet. Call submit_visual_recognition only after every image has been recorded via record_visual_answer.'
       ),
       status,
     };

@@ -1,5 +1,11 @@
 /**
- * Visual Test Agent - Test 3 Koordinator Ajani
+ * Visual Test Agent - Test 3 Koordinator Ajani (Basitlestirilmis)
+ * 
+ * Akis: Gorsel goster → Gemini kullaniciya sorar → Kullanici cevaplar →
+ * Gemini record_visual_answer tool call yapar → Kayit → Sonraki gorsel
+ * 
+ * Onay mekanizmasi KALDIRILDI - tum kontrol Gemini'de,
+ * backend sadece kayit ve gorsel yonetimi yapar.
  */
 
 const { createLogger } = require('../lib/logger');
@@ -13,10 +19,7 @@ const log = createLogger('VisualTestAgent');
 const VT_STATE = {
   IDLE: 'IDLE',
   GENERATING: 'GENERATING',
-  WAITING_CANDIDATE: 'WAITING_CANDIDATE',
-  AWAITING_CONFIRMATION: 'AWAITING_CONFIRMATION',
-  READY_TO_RECORD: 'READY_TO_RECORD',
-  COLLECTING: 'COLLECTING',
+  WAITING_ANSWER: 'WAITING_ANSWER',
   DONE: 'DONE',
 };
 
@@ -65,86 +68,7 @@ const TR_TO_EN_SUBJECT = {
   eldiven: 'glove',
 };
 
-const INPUT_SETTLE_MS = 1800;
-const MAX_INVALID_ATTEMPTS = 2;
-const AGENT_GUARD_COOLDOWN_MS = 2500;
-const CONFIRM_SEND_DELAY_MS = 1200;
-
-const FILLER_ONLY_PHRASES = new Set([
-  'hmm',
-  'hmmm',
-  'umm',
-  'uh',
-  'aa',
-  'aaa',
-  'ee',
-  'eee',
-  'sey',
-  'yani',
-  'bir saniye',
-  'dur',
-  'wait',
-  'one second',
-]);
-
-const SKIP_PATTERNS = [
-  /\batla\b/,
-  /\bpas gec\b/,
-  /\bsorulari atla\b/,
-  /\bsonraki(?:ne)? gec\b/,
-  /\bdevam et\b/,
-  /\bskip\b/,
-  /\bpass\b/,
-  /\bnext\b/,
-];
-
-const UNKNOWN_PATTERNS = [
-  /\bbilmiyorum\b/,
-  /\bgoremiyorum\b/,
-  /\bgoremedim\b/,
-  /\bemin degilim\b/,
-  /\banlayamadim\b/,
-  /\bi do not know\b/,
-  /\bi dont know\b/,
-  /\bnot sure\b/,
-  /\bcant tell\b/,
-  /\bcannot tell\b/,
-  /\bi cant see\b/,
-  /\bi cannot see\b/,
-];
-
-const CONFIRM_YES_PATTERNS = [
-  /\bevet\b/,
-  /\bkaydet\b/,
-  /\btamam\b/,
-  /\bolur\b/,
-  /\bdogru\b/,
-  /\byes\b/,
-  /\bsave it\b/,
-  /\bcorrect\b/,
-  /\bthats right\b/,
-  /\bthat's right\b/,
-];
-
-const CONFIRM_NO_PATTERNS = [
-  /\bhayir\b/,
-  /\byanlis\b/,
-  /\bdegil\b/,
-  /\bno\b/,
-  /\bnot that\b/,
-  /\bincorrect\b/,
-];
-
-const NON_ANSWER_PATTERNS = [
-  /\btekrar\b/,
-  /\bbir daha\b/,
-  /\banlamadim\b/,
-  /\bduymadim\b/,
-  /\bwhat\b/,
-  /\brepeat\b/,
-  /\bsoruyu tekrar\b/,
-  /\bcan you repeat\b/,
-];
+const AGENT_GUARD_COOLDOWN_MS = 3000;
 
 const AGENT_ADVANCE_PATTERNS = [
   /\bsonraki gorsel\b/,
@@ -165,234 +89,156 @@ const AGENT_ADVANCE_PATTERNS = [
   /\btest 4\b/,
 ];
 
-const LEADING_TR_PHRASES = [
-  'bu bir ',
-  'bu ',
-  'galiba ',
-  'sanirim ',
-  'sanirim bu ',
-  'sanki ',
-  'bence ',
-];
-
-const TRAILING_TR_PHRASES = [
-  ' galiba',
-  ' sanirim',
-  ' herhalde',
-  ' olabilir',
-];
-
-const LEADING_EN_PHRASES = [
-  'it is ',
-  "it's ",
-  'this is ',
-  'i think it is ',
-  "i think it's ",
-  'maybe it is ',
-  'looks like ',
-  'it looks like ',
-  'a ',
-  'an ',
-  'the ',
-];
-
-const TRAILING_EN_PHRASES = [
-  ' i think',
-  ' maybe',
-  ' i guess',
-];
-
-function mapSubjectToEnglish(subject) {
-  return TR_TO_EN_SUBJECT[subject] || subject;
-}
-
-function normalizeForIntent(text, language = 'tr') {
-  if (!text) return '';
-  const locale = isEnglish(language) ? 'en-US' : 'tr-TR';
-  return String(text)
-    .toLocaleLowerCase(locale)
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[’'`"]/g, '')
-    .replace(/[?!.,;:]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+function normalizeForIntent(rawText, language) {
+  if (!rawText) return '';
+  let t = String(rawText).toLowerCase().trim();
+  t = t.replace(/[.,!?;:'"()\[\]{}<>\/\\@#$%^&*_+=~`|]/g, ' ');
+  t = t
+    .replace(/ı/g, 'i')
+    .replace(/ö/g, 'o')
+    .replace(/ü/g, 'u')
+    .replace(/ş/g, 's')
+    .replace(/ç/g, 'c')
+    .replace(/ğ/g, 'g')
+    .replace(/İ/g, 'i')
+    .replace(/Ö/g, 'o')
+    .replace(/Ü/g, 'u')
+    .replace(/Ş/g, 's')
+    .replace(/Ç/g, 'c')
+    .replace(/Ğ/g, 'g');
+  t = t.replace(/\s+/g, ' ').trim();
+  return t;
 }
 
 function matchesAnyPattern(text, patterns) {
   return patterns.some((pattern) => pattern.test(text));
 }
 
-function trimPhraseList(text, phrases, fromStart = true) {
-  let value = text;
-  let changed = true;
-
-  while (changed) {
-    changed = false;
-    for (const phrase of phrases) {
-      if (fromStart && value.startsWith(phrase)) {
-        value = value.slice(phrase.length).trim();
-        changed = true;
-      }
-      if (!fromStart && value.endsWith(phrase)) {
-        value = value.slice(0, value.length - phrase.length).trim();
-        changed = true;
-      }
-    }
-  }
-
-  return value;
-}
-
-function normalizeCandidateAnswer(rawText, language) {
-  if (!rawText) return '';
-
-  let normalized = normalizeForIntent(rawText, language)
-    .replace(/^(cevabim|cevap|answer)\s+/g, '')
+/** Havuzdaki Türkçe subject → TR_TO_EN_SUBJECT anahtarı (ASCII) */
+function asciiSubjectKey(trSubject) {
+  return String(trSubject || '')
+    .toLowerCase()
+    .replace(/ı/g, 'i')
+    .replace(/ö/g, 'o')
+    .replace(/ü/g, 'u')
+    .replace(/ş/g, 's')
+    .replace(/ç/g, 'c')
+    .replace(/ğ/g, 'g')
     .trim();
-
-  if (isEnglish(language)) {
-    normalized = trimPhraseList(normalized, LEADING_EN_PHRASES, true);
-    normalized = trimPhraseList(normalized, TRAILING_EN_PHRASES, false);
-  } else {
-    normalized = trimPhraseList(normalized, LEADING_TR_PHRASES, true);
-    normalized = trimPhraseList(normalized, TRAILING_TR_PHRASES, false);
-  }
-
-  return normalized.replace(/\s+/g, ' ').trim();
 }
 
 class VisualTestAgent {
+  /** index.js: new VisualTestAgent(sessionId, sendToClient, sendTextToLive, language) */
   constructor(sessionId, sendToClient, sendTextToLive, language = 'tr') {
     this.sessionId = sessionId;
     this.sendToClient = sendToClient;
     this.sendTextToLive = sendTextToLive;
     this.language = normalizeLanguage(language);
 
-    this.testImages = selectRandomKeywords(3).map((item) => {
-      const localized = isEnglish(this.language)
-        ? mapSubjectToEnglish(normalizeForIntent(item.subject, 'tr'))
-        : item.subject;
-      return {
-        ...item,
-        localizedSubject: localized,
-        localizedCorrectAnswer: localized,
-      };
-    });
-    log.info('Session icin rastgele gorseller secildi', {
-      sessionId,
-      language: this.language,
-      keywords: this.testImages.map((k) => k.localizedSubject),
-    });
-
-    this.state = VT_STATE.IDLE;
-    this.currentImageIndex = -1;
-    this.answers = [];
     this.isActive = false;
-
-    this.userInputBuffer = '';
-    this.inputBufferTimeout = null;
-    this.pendingAnswerCandidate = null;
-    this.readyToRecordAnswer = null;
-    this.retryCountByImage = new Map();
+    this.state = VT_STATE.IDLE;
+    this.testImages = [];
+    this.currentImageIndex = 0;
+    this.answers = [];
     this.lastAgentGuardAt = 0;
   }
 
   async startTest() {
-    if (this.isActive) {
-      return {
-        success: false,
-        message: pickText(
-          this.language,
-          'Gorsel tanima testi zaten devam ediyor.',
-          'Visual recognition test is already in progress.'
-        ),
-      };
-    }
-
     this.isActive = true;
-    this.state = VT_STATE.IDLE;
-    this.currentImageIndex = -1;
+    this.state = VT_STATE.GENERATING;
+    this.currentImageIndex = 0;
     this.answers = [];
-    this.pendingAnswerCandidate = null;
-    this.readyToRecordAnswer = null;
-    this.retryCountByImage.clear();
-    this._clearBufferedInput();
+
+    const keywords = selectRandomKeywords(3);
+    this.testImages = keywords.map((kw, index) => {
+      const subjectTr = kw.subject;
+      const asciiKey = asciiSubjectKey(subjectTr);
+      const enLabel = TR_TO_EN_SUBJECT[asciiKey] || asciiKey;
+      return {
+        index,
+        subjectTr,
+        enLabel,
+        localizedCorrectAnswer: isEnglish(this.language) ? enLabel : kw.correctAnswer,
+        imageBase64: null,
+        mimeType: null,
+        generatedByAI: false,
+      };
+    });
+
+    log.info('Gorsel testi baslatildi', {
+      sessionId: this.sessionId,
+      keywords: this.testImages.map((img) => img.subjectTr),
+    });
 
     this.sendToClient({
       type: 'visual_test_started',
       totalImages: this.testImages.length,
     });
 
-    await this._generateAndShowNextImage();
+    await this._generateAndShowImage(0);
 
     return {
       success: true,
+      totalImages: this.testImages.length,
       message: pickText(
         this.language,
-        `Gorsel tanima testi baslatildi. Bu oturumdaki gorseller: ${this.testImages.map((k) => k.localizedSubject).join(', ')}. Ilk gorsel ekranda. Kullanicidan sadece ne gordugunu soylemesini iste. "Atla" komutunu kabul etme; kullanici isterse "bilmiyorum" diyebilir. Her cevabi kaydetmeden once sesli onay al.`,
-        `Visual recognition test started. Subjects in this session: ${this.testImages.map((k) => k.localizedSubject).join(', ')}. The first image is on screen. Ask the user only what they see. Do not accept skip commands; the user may say "I don't know". Confirm every answer aloud before recording it.`
+        `Gorsel tanima testi baslatildi. ${this.testImages.length} gorsel gosterilecek. Ilk gorsel ekranda. Kullaniciya ne gordugunu sor.`,
+        `Visual recognition test started. ${this.testImages.length} images will be shown. The first image is on screen. Ask the user what they see.`
       ),
-      totalImages: this.testImages.length,
-      currentImage: 1,
-      selectedSubjects: this.testImages.map((k) => k.localizedSubject),
     };
   }
 
-  async _generateAndShowNextImage() {
-    this.currentImageIndex += 1;
-    if (this.currentImageIndex >= this.testImages.length) {
-      this.state = VT_STATE.COLLECTING;
-      return;
-    }
+  async _generateAndShowImage(imageIndex) {
+    if (imageIndex >= this.testImages.length) return;
 
-    this.pendingAnswerCandidate = null;
-    this.readyToRecordAnswer = null;
-    this._clearBufferedInput();
-
-    const imageConfig = this.testImages[this.currentImageIndex];
-    this.state = VT_STATE.GENERATING;
+    this.currentImageIndex = imageIndex;
+    this.state = VT_STATE.WAITING_ANSWER;
+    const imageConfig = this.testImages[imageIndex];
 
     this.sendToClient({
       type: 'visual_test_generating',
-      imageIndex: this.currentImageIndex,
+      imageIndex,
       totalImages: this.testImages.length,
     });
 
-    try {
-      const pipeline = getImagePipeline();
-      const prompt = isEnglish(this.language)
-        ? `A simple, clear and recognizable image of ${imageConfig.localizedSubject}. Minimalist composition, clean background.`
-        : `Basit, net ve taninabilir bir ${imageConfig.localizedSubject} gorseli. Minimalist, temiz arka plan.`;
-      const result = await pipeline.run(prompt, { aspectRatio: '1:1' });
+    const pipeline = getImagePipeline();
+    if (pipeline) {
+      try {
+        const result = await pipeline.run(imageConfig.subjectTr);
+        if (result?.success && result.image?.data) {
+          imageConfig.imageBase64 = result.image.data;
+          imageConfig.mimeType = result.image.mimeType || 'image/jpeg';
+          imageConfig.generatedByAI = true;
 
-      if (result.success && result.image) {
-        this.sendToClient({
-          type: 'visual_test_image',
-          imageIndex: this.currentImageIndex,
-          imageBase64: result.image.data,
-          mimeType: result.image.mimeType,
-          generatedByAI: true,
-          totalImages: this.testImages.length,
+          this.sendToClient({
+            type: 'visual_test_image',
+            imageIndex,
+            imageBase64: result.image.data,
+            mimeType: imageConfig.mimeType,
+            generatedByAI: true,
+            totalImages: this.testImages.length,
+          });
+
+          log.info('AI gorsel olusturuldu', {
+            sessionId: this.sessionId,
+            imageIndex,
+            subject: imageConfig.subjectTr,
+          });
+          return;
+        }
+      } catch (error) {
+        log.warn('AI gorsel olusturma basarisiz, statik gorsele donuluyor', {
+          sessionId: this.sessionId,
+          imageIndex,
+          error: error.message,
         });
-      } else {
-        this._sendFallbackImage(this.currentImageIndex, imageConfig.subject);
       }
-    } catch (error) {
-      log.error('Gorsel uretim hatasi', {
-        sessionId: this.sessionId,
-        imageIndex: this.currentImageIndex,
-        error: error.message,
-      });
-      this._sendFallbackImage(this.currentImageIndex, imageConfig.subject);
     }
 
-    this.state = VT_STATE.WAITING_CANDIDATE;
-  }
-
-  _sendFallbackImage(imageIndex, subject) {
-    const staticImage = getStaticTestImage(subject);
+    const staticImage = getStaticTestImage(imageConfig.subjectTr);
     if (staticImage) {
+      imageConfig.imageBase64 = staticImage.data;
+      imageConfig.mimeType = staticImage.mimeType;
       this.sendToClient({
         type: 'visual_test_image',
         imageIndex,
@@ -415,334 +261,103 @@ class VisualTestAgent {
     });
   }
 
-  onUserTranscript(text) {
-    if (!this.isActive) return;
-    if (![VT_STATE.WAITING_CANDIDATE, VT_STATE.AWAITING_CONFIRMATION].includes(this.state)) return;
-
-    const cleanText = String(text || '').trim();
-    if (!cleanText) return;
-
-    this.userInputBuffer = `${this.userInputBuffer} ${cleanText}`.trim();
-    if (this.inputBufferTimeout) clearTimeout(this.inputBufferTimeout);
-    this.inputBufferTimeout = setTimeout(() => {
-      this._finalizeBufferedUserInput().catch((error) => {
-        log.error('Visual user input finalize hatasi', {
-          sessionId: this.sessionId,
-          state: this.state,
-          error: error.message,
-        });
-      });
-    }, INPUT_SETTLE_MS);
-  }
-
   onAgentTranscript(text) {
-    if (!this.isActive) return;
-
-    const preview = String(text || '').substring(0, 80);
-    log.debug('Agent transcript (visual test)', {
-      sessionId: this.sessionId,
-      state: this.state,
-      text: preview,
-    });
-
-    if (![VT_STATE.WAITING_CANDIDATE, VT_STATE.AWAITING_CONFIRMATION].includes(this.state)) {
-      return;
-    }
+    if (!this.isActive || this.state !== VT_STATE.WAITING_ANSWER) return;
 
     const normalized = normalizeForIntent(text, this.language);
-    if (!matchesAnyPattern(normalized, AGENT_ADVANCE_PATTERNS)) {
-      return;
-    }
+    if (!matchesAnyPattern(normalized, AGENT_ADVANCE_PATTERNS)) return;
 
     const now = Date.now();
-    if (now - this.lastAgentGuardAt < AGENT_GUARD_COOLDOWN_MS) {
-      return;
-    }
-
+    if (now - this.lastAgentGuardAt < AGENT_GUARD_COOLDOWN_MS) return;
     this.lastAgentGuardAt = now;
+
     this.sendTextToLive(
       pickText(
         this.language,
-        `VISUAL_TEST_GUARD: Gorsel ${this.currentImageIndex + 1}/${this.testImages.length} henuz kapanmadi. Sonraki gorsele veya teste gectigini soyleme. Ayni gorselde kal; eger cevap bekleniyorsa sadece "Ne goruyorsunuz?" diye sor, eger onay bekleniyorsa sadece cevabi onaylat.`,
-        `VISUAL_TEST_GUARD: Image ${this.currentImageIndex + 1}/${this.testImages.length} is not closed yet. Do not say or imply that you moved to the next image or next test. Stay on the same image; if an answer is pending ask only what the user sees, and if confirmation is pending ask only for confirmation.`
-      )
-    );
-  }
-
-  async _finalizeBufferedUserInput() {
-    this.inputBufferTimeout = null;
-    const text = this.userInputBuffer.trim();
-    this.userInputBuffer = '';
-
-    if (!text || !this.isActive) {
-      return;
-    }
-
-    if (this.state === VT_STATE.WAITING_CANDIDATE) {
-      await this._handleCandidateInput(text);
-      return;
-    }
-
-    if (this.state === VT_STATE.AWAITING_CONFIRMATION) {
-      await this._handleConfirmationInput(text);
-    }
-  }
-
-  async _handleCandidateInput(text) {
-    const normalized = normalizeForIntent(text, this.language);
-
-    if (!normalized) {
-      return;
-    }
-
-    if (matchesAnyPattern(normalized, SKIP_PATTERNS)) {
-      this._handleRejectedInput('VISUAL_SKIP_REJECTED');
-      return;
-    }
-
-    if (matchesAnyPattern(normalized, UNKNOWN_PATTERNS)) {
-      this._lockAnswerForRecording(pickText(this.language, 'bilmiyorum', "i don't know"), 'explicit_unknown');
-      return;
-    }
-
-    if (matchesAnyPattern(normalized, NON_ANSWER_PATTERNS) || FILLER_ONLY_PHRASES.has(normalized)) {
-      this._handleRejectedInput('NO_CLEAR_VISUAL_ANSWER');
-      return;
-    }
-
-    const candidate = normalizeCandidateAnswer(text, this.language);
-    if (!candidate || candidate.split(' ').length > 8 || FILLER_ONLY_PHRASES.has(candidate)) {
-      this._handleRejectedInput('NO_CLEAR_VISUAL_ANSWER');
-      return;
-    }
-
-    this.pendingAnswerCandidate = {
-      imageIndex: this.currentImageIndex,
-      userAnswer: candidate,
-    };
-    this.state = VT_STATE.AWAITING_CONFIRMATION;
-
-    this._delaySendTextToLive(
-      pickText(
-        this.language,
-        `VISUAL_TEST_CONFIRM: Gorsel ${this.currentImageIndex + 1}/${this.testImages.length} icin kullanicinin aday cevabi "${candidate}". Sonraki gorsele gecme. Sadece "${candidate}" olarak kaydedeyim mi? diye sor ve net evet/hayir cevabi bekle. "Atla" komutunu kabul etme; kullanici isterse "bilmiyorum" diyebilir.`,
-        `VISUAL_TEST_CONFIRM: The candidate answer for image ${this.currentImageIndex + 1}/${this.testImages.length} is "${candidate}". Do not move to the next image. Ask only whether you should record "${candidate}" and wait for a clear yes/no answer. Do not accept skip commands; the user may say "I don't know".`
-      )
-    );
-  }
-
-  async _handleConfirmationInput(text) {
-    const normalized = normalizeForIntent(text, this.language);
-
-    if (!normalized) {
-      return;
-    }
-
-    if (matchesAnyPattern(normalized, CONFIRM_YES_PATTERNS) && this.pendingAnswerCandidate) {
-      this._lockAnswerForRecording(this.pendingAnswerCandidate.userAnswer, 'confirmed');
-      return;
-    }
-
-    if (matchesAnyPattern(normalized, UNKNOWN_PATTERNS)) {
-      this.pendingAnswerCandidate = null;
-      this._lockAnswerForRecording(pickText(this.language, 'bilmiyorum', "i don't know"), 'explicit_unknown');
-      return;
-    }
-
-    if (matchesAnyPattern(normalized, CONFIRM_NO_PATTERNS)) {
-      this.pendingAnswerCandidate = null;
-      this.state = VT_STATE.WAITING_CANDIDATE;
-      this._delaySendTextToLive(
-        pickText(
-          this.language,
-          `VISUAL_TEST_REASK: Gorsel ${this.currentImageIndex + 1}/${this.testImages.length} icin onceki cevap kaydedilmedi. Ayni gorselde kal ve kullanicidan sadece ne gordugunu tekrar soylemesini iste.`,
-          `VISUAL_TEST_REASK: The previous answer for image ${this.currentImageIndex + 1}/${this.testImages.length} was not recorded. Stay on the same image and ask the user again what they see.`
-        )
-      );
-      return;
-    }
-
-    if (matchesAnyPattern(normalized, SKIP_PATTERNS)) {
-      this.pendingAnswerCandidate = null;
-      this.state = VT_STATE.WAITING_CANDIDATE;
-      this._handleRejectedInput('VISUAL_SKIP_REJECTED');
-      return;
-    }
-
-    this._delaySendTextToLive(
-      pickText(
-        this.language,
-        `VISUAL_TEST_CONFIRM_RETRY: Gorsel ${this.currentImageIndex + 1}/${this.testImages.length} icin sadece evet, hayir veya bilmiyorum turu net bir cevap iste. Sonraki gorsele gecme.`,
-        `VISUAL_TEST_CONFIRM_RETRY: For image ${this.currentImageIndex + 1}/${this.testImages.length}, ask for a clear yes, no, or I don't know answer only. Do not move to the next image.`
-      )
-    );
-  }
-
-  _handleRejectedInput(reason) {
-    const currentAttempts = (this.retryCountByImage.get(this.currentImageIndex) || 0) + 1;
-    this.retryCountByImage.set(this.currentImageIndex, currentAttempts);
-    this.pendingAnswerCandidate = null;
-    this.state = VT_STATE.WAITING_CANDIDATE;
-
-    const offerUnknown = currentAttempts >= MAX_INVALID_ATTEMPTS;
-    this.sendTextToLive(
-      pickText(
-        this.language,
-        offerUnknown
-          ? `VISUAL_TEST_REPROMPT: Gorsel ${this.currentImageIndex + 1}/${this.testImages.length} icin "atla" gecersiz. Ayni gorselde kal. Kullaniciya sadece ne gordugunu soylemesini iste; goremiyorsa veya bilmiyorsa bunu acikca "bilmiyorum" diye belirtebilecegini soyle.`
-          : `VISUAL_TEST_REPROMPT: Gorsel ${this.currentImageIndex + 1}/${this.testImages.length} henuz cevaplanmadi. Ayni gorselde kal. Kullaniciya sadece ne gordugunu soylemesini iste. "Atla" komutunu kabul etme.`,
-        offerUnknown
-          ? `VISUAL_TEST_REPROMPT: Skip is invalid for image ${this.currentImageIndex + 1}/${this.testImages.length}. Stay on the same image. Ask the user only what they see; if they truly cannot identify it, tell them they may clearly say "I don't know".`
-          : `VISUAL_TEST_REPROMPT: Image ${this.currentImageIndex + 1}/${this.testImages.length} is still unanswered. Stay on the same image. Ask the user only what they see. Do not accept skip commands.`
-      )
-    );
-
-    log.warn('Visual input rejected', {
-      sessionId: this.sessionId,
-      imageIndex: this.currentImageIndex,
-      reason,
-      attempts: currentAttempts,
-    });
-  }
-
-  _lockAnswerForRecording(answerText, answerKind) {
-    const imageConfig = this.testImages[this.currentImageIndex];
-    this.pendingAnswerCandidate = null;
-    this.readyToRecordAnswer = {
-      imageIndex: this.currentImageIndex,
-      imageId: `image_${this.currentImageIndex}`,
-      userAnswer: answerText,
-      correctAnswer: imageConfig.localizedCorrectAnswer,
-      answerKind,
-    };
-    this.state = VT_STATE.READY_TO_RECORD;
-
-    this._delaySendTextToLive(
-      pickText(
-        this.language,
-        `VISUAL_TEST_RECORD_READY: Gorsel ${this.currentImageIndex + 1}/${this.testImages.length} icin kilitlenmis cevap "${answerText}". Simdi hemen record_visual_answer cagir. sessionId: "${this.sessionId}", imageIndex: ${this.currentImageIndex}, userAnswer: "${answerText}". Bu tool cagrisi olmadan sonraki gorsele veya submit_visual_recognition adimina gecme.`,
-        `VISUAL_TEST_RECORD_READY: The locked answer for image ${this.currentImageIndex + 1}/${this.testImages.length} is "${answerText}". Call record_visual_answer immediately with sessionId: "${this.sessionId}", imageIndex: ${this.currentImageIndex}, userAnswer: "${answerText}". Do not move to the next image or submit_visual_recognition before this tool call.`
+        `VISUAL_TEST_GUARD: Gorsel ${this.currentImageIndex + 1}/${this.testImages.length} henuz cevaplanmadi. Sonraki gorsele gecme. Kullaniciya ne gordugunu sor.`,
+        `VISUAL_TEST_GUARD: Image ${this.currentImageIndex + 1}/${this.testImages.length} is not answered yet. Do not move to the next image. Ask the user what they see.`
       )
     );
   }
 
   async recordAnswer(imageIndex, userAnswer) {
-    // LLM halusinasyonuna karsi koruma: her zaman currentImageIndex'i kullan
     const effectiveImageIndex = this.currentImageIndex;
+    const answer = String(userAnswer || '').trim();
 
-    const llmRequestedIndex = Number.isInteger(imageIndex)
-      ? imageIndex
-      : Number.parseInt(imageIndex, 10);
-
-    if (Number.isFinite(llmRequestedIndex) && llmRequestedIndex !== this.currentImageIndex) {
-      log.warn('LLM yanlis imageIndex gonderdi, currentImageIndex kullaniliyor', {
-        sessionId: this.sessionId,
-        llmRequestedIndex,
-        currentImageIndex: this.currentImageIndex,
-      });
-    }
-
-    log.info('Visual record attempt', {
+    log.info('Visual record', {
       sessionId: this.sessionId,
       state: this.state,
       currentImageIndex: this.currentImageIndex,
       effectiveImageIndex,
-      llmUserAnswer: userAnswer,
-      hasReadyAnswer: !!this.readyToRecordAnswer,
+      userAnswer: answer,
     });
 
-    const existingAnswer = this.answers.find((answer) => answer.imageIndex === effectiveImageIndex);
+    const existingAnswer = this.answers.find((a) => a.imageIndex === effectiveImageIndex);
     if (existingAnswer) {
-      return this._buildDuplicateRecordResult(existingAnswer);
+      return this._buildDuplicateResult(existingAnswer);
     }
 
-    if (!this.isActive && !this.readyToRecordAnswer) {
+    if (!this.isActive) {
       return {
         success: false,
         blocked: true,
         reason: 'VISUAL_TEST_INACTIVE',
-        message: pickText(
-          this.language,
-          'Gorsel tanima testi aktif degil.',
-          'Visual recognition test is not active.'
-        ),
+        message: pickText(this.language, 'Gorsel tanima testi aktif degil.', 'Visual recognition test is not active.'),
       };
     }
 
-    if (!this.readyToRecordAnswer) {
-      const reason =
-        this.state === VT_STATE.AWAITING_CONFIRMATION
-          ? 'AWAITING_VISUAL_CONFIRMATION'
-          : 'NO_CONFIRMED_VISUAL_ANSWER';
-
-      // Blocked: LLM'e aktif geri bildirim gonder ki soru atlamasin
-      this._delaySendTextToLive(
-        pickText(
-          this.language,
-          `VISUAL_TEST_BLOCKED: record_visual_answer engellendi (${reason}). Gorsel ${this.currentImageIndex + 1}/${this.testImages.length} icin henuz onaylanmis cevap yok. Ayni gorselde kal, kullanicidan net cevap veya onay al. Sonraki gorsele veya teste GECME.`,
-          `VISUAL_TEST_BLOCKED: record_visual_answer was blocked (${reason}). Image ${this.currentImageIndex + 1}/${this.testImages.length} has no confirmed answer yet. Stay on the same image, get a clear answer or confirmation. Do NOT move to the next image or test.`
-        )
-      );
-
+    if (!answer) {
       return {
         success: false,
         blocked: true,
-        reason,
+        reason: 'EMPTY_ANSWER',
         message: pickText(
           this.language,
-          this.state === VT_STATE.AWAITING_CONFIRMATION
-            ? `Gorsel ${this.currentImageIndex + 1}: Cevap kilitlenmeden once net sesli onay alinmali. Ayni gorselde kal.`
-            : `Gorsel ${this.currentImageIndex + 1}: Henuz onaylanmis bir cevap yok. Once kullanicidan net cevap veya "bilmiyorum" al. Ayni gorselde kal.`,
-          this.state === VT_STATE.AWAITING_CONFIRMATION
-            ? `Image ${this.currentImageIndex + 1}: A clear spoken confirmation is required before recording. Stay on the same image.`
-            : `Image ${this.currentImageIndex + 1}: No confirmed answer yet. Get a clear answer or "I do not know" first. Stay on the same image.`
-        ),
-        currentImage: this.currentImageIndex + 1,
-        totalImages: this.testImages.length,
-      };
-    }
-
-    const lockedAnswer = this.readyToRecordAnswer;
-    if (lockedAnswer.imageIndex !== this.currentImageIndex) {
-      return {
-        success: false,
-        blocked: true,
-        reason: 'VISUAL_WRONG_IMAGE_ORDER',
-        message: pickText(
-          this.language,
-          'Kilitli cevap aktif gorselle eslesmiyor. Ayni gorselde kalip tekrar dene.',
-          'The locked answer does not match the active image. Stay on the same image and try again.'
+          `Gorsel ${effectiveImageIndex + 1}: Bos cevap gonderilemez. Kullaniciya tekrar sor.`,
+          `Image ${effectiveImageIndex + 1}: Empty answer cannot be recorded. Ask the user again.`
         ),
       };
     }
 
-    this._clearBufferedInput();
-    this.answers.push({ ...lockedAnswer });
-    this.readyToRecordAnswer = null;
-    this.pendingAnswerCandidate = null;
-    this.retryCountByImage.delete(this.currentImageIndex);
+    const imageConfig = this.testImages[effectiveImageIndex];
+    const answerRecord = {
+      imageIndex: effectiveImageIndex,
+      imageId: `image_${effectiveImageIndex}`,
+      userAnswer: answer,
+      correctAnswer: imageConfig.localizedCorrectAnswer,
+      answerKind: 'direct',
+    };
+
+    this.answers.push(answerRecord);
 
     this.sendToClient({
       type: 'visual_test_answer_recorded',
-      imageIndex: lockedAnswer.imageIndex,
+      imageIndex: effectiveImageIndex,
       answeredCount: this.answers.length,
       totalImages: this.testImages.length,
-      answerKind: lockedAnswer.answerKind,
     });
 
-    if (this.currentImageIndex + 1 < this.testImages.length) {
-      await this._generateAndShowNextImage();
+    log.info('Visual cevap kaydedildi', {
+      sessionId: this.sessionId,
+      imageIndex: effectiveImageIndex,
+      userAnswer: answer,
+      correctAnswer: imageConfig.localizedCorrectAnswer,
+      answeredCount: this.answers.length,
+    });
+
+    if (effectiveImageIndex + 1 < this.testImages.length) {
+      await this._generateAndShowImage(effectiveImageIndex + 1);
       return {
         success: true,
         message: pickText(
           this.language,
-          `Gorsel ${lockedAnswer.imageIndex + 1} cevabi kaydedildi. Simdi gorsel ${this.currentImageIndex + 1}/${this.testImages.length} ekranda.`,
-          `The answer for image ${lockedAnswer.imageIndex + 1} is recorded. Image ${this.currentImageIndex + 1}/${this.testImages.length} is now on screen.`
+          `Gorsel ${effectiveImageIndex + 1} cevabi kaydedildi. Simdi gorsel ${this.currentImageIndex + 1}/${this.testImages.length} ekranda. Kullaniciya ne gordugunu sor.`,
+          `Answer for image ${effectiveImageIndex + 1} recorded. Image ${this.currentImageIndex + 1}/${this.testImages.length} is now on screen. Ask the user what they see.`
         ),
         currentImage: this.currentImageIndex + 1,
         totalImages: this.testImages.length,
         remainingImages: this.testImages.length - this.answers.length,
-        recordedAnswer: lockedAnswer.userAnswer,
+        recordedAnswer: answer,
       };
     }
 
@@ -761,13 +376,13 @@ class VisualTestAgent {
       message: pickText(
         this.language,
         `Tum ${this.testImages.length} gorsel cevaplandi. Simdi submit_visual_recognition fonksiyonunu cagir. sessionId: "${this.sessionId}", answers: ${JSON.stringify(answersForSubmit)}.`,
-        `All ${this.testImages.length} images are answered. Now call submit_visual_recognition with sessionId: "${this.sessionId}", answers: ${JSON.stringify(answersForSubmit)}.`
+        `All ${this.testImages.length} images answered. Now call submit_visual_recognition with sessionId: "${this.sessionId}", answers: ${JSON.stringify(answersForSubmit)}.`
       ),
       answers: answersForSubmit,
     };
   }
 
-  _buildDuplicateRecordResult(existingAnswer) {
+  _buildDuplicateResult(existingAnswer) {
     return {
       success: true,
       duplicate: true,
@@ -798,20 +413,8 @@ class VisualTestAgent {
         imageId: answer.imageId,
         userAnswer: answer.userAnswer,
         correctAnswer: answer.correctAnswer,
-        answerKind: answer.answerKind || 'confirmed',
+        answerKind: answer.answerKind || 'direct',
       }));
-  }
-
-  forceFinalize() {
-    if (this.inputBufferTimeout) {
-      clearTimeout(this.inputBufferTimeout);
-      this._finalizeBufferedUserInput().catch((error) => {
-        log.error('Visual forceFinalize hatasi', {
-          sessionId: this.sessionId,
-          error: error.message,
-        });
-      });
-    }
   }
 
   get isTestActive() {
@@ -825,8 +428,6 @@ class VisualTestAgent {
       currentImageIndex: this.currentImageIndex,
       answeredCount: this.answers.length,
       totalImages: this.testImages.length,
-      hasPendingCandidate: !!this.pendingAnswerCandidate,
-      hasReadyToRecordAnswer: !!this.readyToRecordAnswer,
     };
   }
 
@@ -835,32 +436,9 @@ class VisualTestAgent {
   }
 
   destroy() {
-    this._clearBufferedInput();
-    if (this._pendingSendTimeout) {
-      clearTimeout(this._pendingSendTimeout);
-      this._pendingSendTimeout = null;
-    }
     this.isActive = false;
-    this.pendingAnswerCandidate = null;
-    this.readyToRecordAnswer = null;
     log.info('VisualTestAgent temizlendi', { sessionId: this.sessionId });
-  }
-
-  _delaySendTextToLive(text) {
-    if (this._pendingSendTimeout) clearTimeout(this._pendingSendTimeout);
-    this._pendingSendTimeout = setTimeout(() => {
-      this._pendingSendTimeout = null;
-      this.sendTextToLive(text);
-    }, CONFIRM_SEND_DELAY_MS);
-  }
-
-  _clearBufferedInput() {
-    if (this.inputBufferTimeout) {
-      clearTimeout(this.inputBufferTimeout);
-      this.inputBufferTimeout = null;
-    }
-    this.userInputBuffer = '';
   }
 }
 
-module.exports = { VisualTestAgent, VT_STATE };
+module.exports = { VisualTestAgent };

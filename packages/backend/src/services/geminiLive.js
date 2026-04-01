@@ -7,7 +7,7 @@
  * Mimari: Browser ↔ WS ↔ Node.js Backend ↔ Gemini Live API
  */
 
-const { GoogleGenAI, Modality, StartSensitivity, EndSensitivity } = require('@google/genai');
+const { GoogleGenAI, Modality } = require('@google/genai');
 const { createLogger } = require('../lib/logger');
 const { normalizeLanguage, isEnglish, pickText } = require('../lib/language');
 
@@ -161,36 +161,25 @@ ADIMLAR:
 ⚠️ ASLA kendi kafandan hikaye uydurma! Daima generate_story fonksiyonunu kullan.
 ⚠️ generate_story'den gelen hikayeyi submit_story_recall'da originalStory olarak AYNEN gönder.
 
-=== TEST 3: GÖRSEL TANIMA (Multi-Agent) ===
+=== TEST 3: GÖRSEL TANIMA ===
 ⚠️ Bu teste SADECE "TRANSITION_READY:" mesajı geldikten sonra başla!
 
-⚠️ KRİTİK: Test 3 çift-ajan mimarisi ile çalışır!
-Sen (Nöra) = Konuşma Ajanı — kullanıcıyla konuşur, cevap alır
-VisualTestAgent = Koordinatör Ajan — görsel üretir, frontend'e gönderir, akışı yönetir
+Görseller kullanıcının ekranına otomatik gösterilir. Sen görseli GÖREMEZSIN.
+⚠️ Kullanıcıya görsellerin ne olduğunu ASLA söyleme.
 
-⚠️ DİNAMİK GÖRSEL SİSTEMİ: Her oturumda farklı görseller gösterilir!
-Görseller geniş bir havuzdan (ev eşyaları, hayvanlar, araçlar, yiyecekler, doğa, giyim) rastgele seçilir.
-start_visual_test çağırdığında response'ta "selectedSubjects" alanında bu oturum için seçilmiş nesnelerin listesini alırsın.
-⚠️ Kullanıcıya görsellerin ne olduğunu ASLA söyleme. Sadece "Ne görüyorsunuz?" diye sor.
-
-AKIŞ:
-1. "Görsel tanıma testine geçiyoruz. Ekranınıza sırayla 3 görsel göstereceğim. Her birinde ne gördüğünüzü söylemenizi isteyeceğim."
-2. start_visual_test() çağır → İlk görsel otomatik ekranda gösterilir. Response'ta selectedSubjects listesi gelir.
+AKIŞ (basit ve kesintisiz):
+1. "Görsel tanıma testine geçiyoruz. Ekranınıza sırayla 3 görsel göstereceğim. Her birinde ne gördüğünüzü söyleyin."
+2. start_visual_test() çağır → İlk görsel otomatik ekranda gösterilir.
 3. Kullanıcıya "Ekrandaki görsele bakın. Ne görüyorsunuz?" diye sor.
-4. Kullanıcı cevap verince cevabı hemen kaydetme. Önce "Cevabınızı X olarak kaydedeyim mi?" diye sor ve net evet/hayır bekle.
-5. Kullanıcı açıkça "bilmiyorum" veya "göremedim" derse bunu sıfır puanlı cevap olarak kabul edebilirsin.
-6. Kullanıcı "atla", "pas geç", "skip" gibi komut verirse kabul etme. Aynı görselde kal ve cevap istemeye devam et.
-7. Sadece kullanıcı cevabı net şekilde onayladığında record_visual_answer(imageIndex, userAnswer) çağır.
-8. Sonraki görsel otomatik gösterilir. Tekrar "Ne görüyorsunuz?" sor.
-9. 3 görsel de cevaplanınca submit_visual_recognition çağır.
-10. Sonra: "Bu testi de tamamladık! Nasıl hissediyorsunuz?" de.
+4. Kullanıcı cevap verdiğinde HEMEN record_visual_answer(sessionId, imageIndex, userAnswer) çağır. Onay sormana GEREK YOK.
+5. Sonraki görsel otomatik gösterilir. Tekrar "Ne görüyorsunuz?" sor.
+6. Kullanıcı "bilmiyorum" / "göremedim" derse userAnswer olarak "bilmiyorum" ile kaydet.
+7. 3 görsel de cevaplanınca submit_visual_recognition çağır.
+8. "Bu testi de tamamladık! Nasıl hissediyorsunuz?" de.
 
 ⚠️ ASLA generate_test_image kullanma! Daima start_visual_test ve record_visual_answer kullan.
 ⚠️ Görsel verisi sana GELMEZ. Görsel doğrudan kullanıcının ekranına gösterilir.
-⚠️ Kullanıcıdan sesli onay almadan record_visual_answer çağırma.
-⚠️ "Atla/pas geç/skip" komutlarını cevap gibi yorumlama; aynı görselde kal.
-⚠️ record_visual_answer veya submit_visual_recognition blocked/false dönerse guard mesajına uy, aynı görselde kal ve ilerleme uydurma.
-⚠️ "VISUAL_TEST_" ile başlayan mesajlar VisualTestAgent'tan gelir. CONFIRM, REPROMPT, REASK, RECORD_READY ve GUARD mesajlarini standart akisa gore daha yuksek oncelikli kabul et.
+⚠️ Onay sorma, doğrudan kaydet. Akışı hızlı ve kesintisiz tut.
 ⚠️ Brain Agent "TRANSITION_READY:" mesajı gönderene kadar Test 4'e GEÇME.
 
 === TEST 4: YÖNELİM (Multi-Agent + Video Analizi) ===
@@ -368,21 +357,23 @@ After the story ends, clearly say "That is the end of the story." to mark comple
 7. Call submit_story_recall with originalStory and the COMPLETE recalledStory.
 8. Congratulate user and ask how they feel. Wait for "TRANSITION_READY:" before starting Test 3.
 
-=== TEST 3: VISUAL RECOGNITION (Multi-Agent) ===
+=== TEST 3: VISUAL RECOGNITION ===
 - Start only after "TRANSITION_READY:" message.
-- Use start_visual_test and record_visual_answer.
-- Never use generate_test_image.
-Flow:
-1. Explain that 3 images will be shown.
+- Images appear on the user's screen; you never see the pixels.
+- Never tell the user what the images are.
+
+Flow (simple, avoid choppy audio — do not spam extra prompts):
+1. Explain that 3 images will be shown one after another.
 2. Call start_visual_test.
 3. Ask: "What do you see on the screen?"
-4. Do not record the first raw answer immediately. Ask for spoken confirmation first: "Should I record your answer as X?"
-5. If the user clearly says "I don't know" or "I can't tell", this can be recorded as a zero-point answer.
-6. If the user says "skip", "pass", or similar commands, do not accept it. Stay on the same image and keep asking what they see.
-7. Call record_visual_answer only after an explicit confirmation or explicit unknown answer.
-8. When all 3 images are closed, call submit_visual_recognition.
-9. Congratulate user and ask how they feel. Wait for "TRANSITION_READY:" before starting Test 4.
-Treat any message prefixed with VISUAL_TEST_ as a high-priority control message from VisualTestAgent.
+4. As soon as the user answers, call record_visual_answer(sessionId, imageIndex, userAnswer). Do NOT ask for a separate confirmation step.
+5. The next image appears automatically; ask again what they see.
+6. If they say "I don't know" / "I can't see it", record userAnswer as that phrase (or "bilmiyorum" in Turkish sessions if appropriate).
+7. After all 3 images are answered, call submit_visual_recognition.
+8. Congratulate the user and ask how they feel. Wait for "TRANSITION_READY:" before starting Test 4.
+
+- Never use generate_test_image.
+- If you receive VISUAL_TEST_GUARD:, stay on the same image; do not claim you moved on.
 
 === TEST 4: ORIENTATION (Multi-Agent + Video) ===
 - Start only after "TRANSITION_READY:" message.
@@ -484,13 +475,14 @@ const TOOL_DECLARATIONS = [
   },
   {
     name: 'record_visual_answer',
-    description: 'Kullanicinin sesli olarak onaylanmis gorsel tanima cevabini kaydeder ve sonraki gorseli gosterir. Bu fonksiyonu sadece net onay veya acik "bilmiyorum" ifadesinden sonra cagir.',
+    description:
+      'Kullanicinin soyledigi gorsel tanima cevabini kaydeder ve (varsa) sonraki gorseli gosterir. Test 3 akisinda kullanici cevap verdikten sonra ek onay sormadan cagir; userAnswer olarak kullanicinin ifadesini aynen veya ozetleyerek gonder.',
     parameters: {
       type: 'object',
       properties: {
         sessionId: { type: 'string', description: 'Test oturumu ID' },
         imageIndex: { type: 'number', description: 'Cevaplanılan görselin indeksi (0, 1, 2)' },
-        userAnswer: { type: 'string', description: 'Sesli olarak onaylanmis cevap veya acik "bilmiyorum" ifadesi' },
+        userAnswer: { type: 'string', description: 'Kullanicinin soyledigi cevap veya bilmiyorum/goremiyorum' },
       },
       required: ['sessionId', 'imageIndex', 'userAnswer'],
     },
@@ -656,15 +648,7 @@ class GeminiLiveSession {
             },
           },
         },
-        realtimeInputConfig: {
-          automaticActivityDetection: {
-            disabled: false,
-            startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_MEDIUM,
-            endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_HIGH,
-            prefixPaddingMs: 60,
-            silenceDurationMs: 1200,
-          },
-        },
+        // VAD: varsayilan Gemini ayarlari kullaniliyor (ozel ayarlar interrupt sorununa yol acti)
         systemInstruction: {
           parts: [{ text: buildSystemInstruction(this.language) }],
         },
@@ -857,7 +841,7 @@ class GeminiLiveSession {
           });
           const guardResult = { blocked: true, reason };
           functionResponses.push({ name: fc.name, id: fc.id, response: guardResult });
-          this.sendTextToLive(
+          this.sendText(
             pickText(
               this.language,
               'STORY_RECALL_GUARD: submit_story_recall REDDEDILDI! Kullanicidan onay alinmadi. ' +

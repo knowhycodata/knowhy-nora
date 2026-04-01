@@ -153,6 +153,8 @@ class BrainAgent {
     this.lastUserSpeechAt = null;
     this.lastProgressAt = null;
     this.inactivityWarningSent = false;
+    this._lastWordWarningAt = null;
+    this._lastDangerWarningAt = null;
     this.INACTIVITY_WARN_AFTER_MS = parsePositiveInt(process.env.TEST1_INACTIVITY_WARN_MS, 15000);
     this.INACTIVITY_STOP_AFTER_MS = parsePositiveInt(process.env.TEST1_INACTIVITY_STOP_MS, 30000);
     this.MIN_AUTO_STOP_ELAPSED_MS = parsePositiveInt(process.env.TEST1_AUTO_STOP_MIN_ELAPSED_MS, 30000);
@@ -300,7 +302,7 @@ class BrainAgent {
       case 'STORY_RECALL_DONE':
         break;
       case 'VISUAL_TEST_ACTIVE':
-        this._handleVisualTestActive(role, rawText, text);
+        this._handleVisualTestActive(role, text, rawText);
         break;
       case 'VISUAL_TEST_DONE':
         this._handlePostVisualTest(role, rawText, agentBuf);
@@ -597,7 +599,11 @@ class BrainAgent {
 
     if (role === 'agent' && this.timerActive) {
       // Ajan kelime sayiyor mu? (hedef harfle baslayan kelime soyluyorsa)
-      if (this.targetLetter && this._agentIsSayingWords(text)) {
+      // Cooldown: son uyaridan 10s gecmediyse tekrar gonderme (sonsuz dongu onlemi)
+      const WORD_WARN_COOLDOWN_MS = 10000;
+      const sinceLastWordWarn = this._lastWordWarningAt ? Date.now() - this._lastWordWarningAt : Infinity;
+      if (this.targetLetter && this._agentIsSayingWords(text) && sinceLastWordWarn > WORD_WARN_COOLDOWN_MS) {
+        this._lastWordWarningAt = Date.now();
         log.warn('KRITIK: Ajan Test 1 sirasinda kelime sayiyor!', {
           sessionId: this.sessionId,
           text: text.substring(0, 120),
@@ -622,7 +628,10 @@ class BrainAgent {
 
       const dangerInText = this._containsAny(text, KEYWORDS.dangerWhileTimer);
       const dangerInBuf = this._containsAny(this.agentBuffer, KEYWORDS.dangerWhileTimer);
-      if (dangerInText || dangerInBuf) {
+      const DANGER_WARN_COOLDOWN_MS = 10000;
+      const sinceLastDangerWarn = this._lastDangerWarningAt ? Date.now() - this._lastDangerWarningAt : Infinity;
+      if ((dangerInText || dangerInBuf) && sinceLastDangerWarn > DANGER_WARN_COOLDOWN_MS) {
+        this._lastDangerWarningAt = Date.now();
         const elapsed = Math.floor((Date.now() - this.timerStartTime) / 1000);
         const remaining = this.timerDuration - elapsed;
         log.warn('KRITIK: Ajan timer aktifken test bitirmeye/gecise calisiyor', {
@@ -711,6 +720,8 @@ class BrainAgent {
     const allowedPatterns = [
       'devam', 'süre', 'sure', 'zaman', 'time', 'continue', 'running',
       'bekle', 'düşün', 'dusun', 'seconds', 'saniye', 'dakika',
+      'kelime', 'word', 'söyle', 'soyle', 'harf', 'letter',
+      'afedersiniz', 'affedersiniz', 'özür', 'ozur', 'pardon', 'sorry',
     ];
     if (allowedPatterns.some(p => cleaned.includes(p))) return false;
 
@@ -900,12 +911,8 @@ class BrainAgent {
   }
 
   _handleVisualTestActive(role, text, rawText) {
-    if (this.visualTestAgent && this.visualTestAgent.isTestActive) {
-      if (role === 'user') {
-        this.visualTestAgent.onUserTranscript(rawText);
-      } else {
-        this.visualTestAgent.onAgentTranscript(rawText);
-      }
+    if (this.visualTestAgent && this.visualTestAgent.isTestActive && role === 'agent') {
+      this.visualTestAgent.onAgentTranscript(rawText);
     }
 
     if (role === 'agent' && this._containsAny(text, KEYWORDS.visualDone)) {
