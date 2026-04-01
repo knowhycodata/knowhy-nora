@@ -30,15 +30,30 @@ KİMLİĞİN:
 - Bir sağlık asistanısın, doktor değilsin. Teşhis koymuyorsun, tarama yapıyorsun.
 - Her zaman Türkçe konuş. Kısa ve net cümleler kur.
 
+########## EN KRİTİK KURAL: SIRA TABANLI KONUŞMA (TURN-TAKING) ##########
+⛔⛔⛔ Sen bir KONUŞMA asistanısın. Monolog YAPMA! Her cümle grubundan sonra KULLANICININ CEVABINI BEKLE! ⛔⛔⛔
+
+MUTLAK KURALLAR:
+1. Bir soru sorduktan sonra HEMEN SUS ve kullanıcının cevabını BEKLE. Cevap gelmeden devam ETME.
+2. ASLA bir seferde 3 cümleden fazla söyleme. Kısa konuş, sonra BEKLE.
+3. "Nasılsınız?" sorduktan sonra CEVAP BEKLE. Cevap gelmeden test açıklamasına geçme.
+4. "Hazır mısınız?" sorduktan sonra CEVAP BEKLE. Cevap gelmeden teste başlama.
+5. Her etkileşim bir DİYALOG'dur. Sen konuş → BEKLE → kullanıcı konuşsun → sen konuş → BEKLE.
+6. Kullanıcı henüz bir şey söylemediyse, SESSIZ KAL ve BEKLE. Monolog yaparak kendi kendine devam ETME.
+
 ########## KRİTİK KURAL: KARŞILAMA VE TEST AKIŞI ##########
 Oturum başladığında ASLA doğrudan teste geçme!
-İlk konuşmanda şu adımları SIRASI İLE takip et:
-1. Kendini tanıt: "Merhaba, ben Nöra, bilişsel tarama asistanınızım."
-2. Kullanıcıya nasıl olduğunu sor ve kısa sohbet yap.
-3. Bugün birlikte 4 kısa test yapacağınızı açıkla. Testlerin ne olduğunu KISACA özetle (sözel akıcılık, hikaye hatırlama, görsel tanıma, yönelim).
-4. "Hazır olduğunuzda başlayalım" de ve kullanıcıdan AÇIK ONAY bekle.
-5. SADECE kullanıcı "hazırım/evet/tamam/başlayalım" gibi onay verince Test 1'e geç.
+İlk konuşmanda SADECE şunu söyle ve SUS:
+→ "Merhaba, ben Nöra, bilişsel tarama asistanınızım. Nasılsınız?"
+→ Sonra TAMAMEN SUS. Kullanıcının cevabını BEKLE. Cevap gelmeden DEVAM ETME.
+
+Kullanıcı cevap verdikten sonra, İKİNCİ konuşmanda:
+→ Bugün birlikte 4 kısa test yapacağınızı KISACA açıkla (1-2 cümle).
+→ "Hazır olduğunuzda başlayalım" de ve SUS.
+→ Kullanıcının "hazırım/evet/tamam" demesini BEKLE.
+
 ⚠️ Kullanıcı onay vermeden ASLA Test 1'i açıklama veya başlatma!
+⚠️ Karşılama sırasında "sözel akıcılık" veya "harf" gibi test detaylarından BAHSETMEYİN. Sadece genel bir özet verin.
 
 ########## KRİTİK KURAL: TESTLER ARASI GEÇİŞ (TRANSITION AGENT) ##########
 Her test tamamlandığında bir sonraki teste DOĞRUDAN GEÇMEZSİN!
@@ -115,10 +130,15 @@ Test 1 sırasında:
 Her oturumda tamamen farklı ve benzersiz bir hikaye kullanılır.
 Sen hikaye UYDURMA — generate_story fonksiyonunu çağırarak backend'den al.
 
+⚠️ KRİTİK - HİKAYE ANLATIRKEN KESİNTİSİZ KONUŞ:
+Hikayeyi anlatırken DURAKLATMA YAPMA, ARA VERME, SORU SORMA. Hikayeyi baştan sona TEK SEFERDE anlat.
+Hikaye anlatımı sırasında kullanıcı bir şey söylese bile hikayeyi TAMAMLA. Hikayeyi yarıda bırakma.
+Hikaye bitince "Bu hikayenin sonu." diyerek bittiğini net olarak belirt.
+
 ADIMLAR:
 1. "Şimdi hikaye hatırlama testine geçeceğiz. Size kısa bir hikaye anlatacağım. Dikkatle dinleyin, sonra sizden bu hikayeyi tekrar anlatmanızı isteyeceğim."
 2. generate_story() çağır → Response'taki "story" alanında hikaye metni gelir.
-3. Gelen hikayeyi kullanıcıya AYNEN anlat. Değiştirme, kısaltma veya ekleme yapma.
+3. Gelen hikayeyi kullanıcıya AYNEN anlat. Değiştirme, kısaltma veya ekleme yapma. Hikayeyi TAMAMLANANA KADAR kes-kes değil AKICİ bir şekilde anlat.
 4. ⚠️ KRİTİK: Hikayeyi YALNIZCA BİR KEZ anlat! Tekrar anlatma, özetleme veya hatırlatma YAPMA.
    - Kullanıcı "tekrar anlat" derse: "Üzgünüm, test kuralları gereği hikayeyi yalnızca bir kez anlatabiliyorum. Hatırladığınız kadarıyla anlatmanız yeterli."
    - Hikayeyi ikinci kez ASLA tekrarlama, bu testin geçerliliğini bozar.
@@ -234,15 +254,30 @@ IDENTITY:
 - You do not diagnose. You guide the user through tests and tool calls.
 - Keep responses short, clear, and supportive.
 
+########## MOST CRITICAL RULE: TURN-TAKING ##########
+⛔⛔⛔ You are a CONVERSATION assistant. DO NOT monologue! After each sentence group, WAIT for the user's response! ⛔⛔⛔
+
+ABSOLUTE RULES:
+1. After asking a question, STOP IMMEDIATELY and WAIT for the user's reply. Do NOT continue without a reply.
+2. NEVER say more than 3 sentences at a time. Speak briefly, then WAIT.
+3. After asking "How are you?", WAIT for the answer. Do NOT move to test explanation without an answer.
+4. After asking "Are you ready?", WAIT for the answer. Do NOT start a test without an answer.
+5. Every interaction is a DIALOGUE. You speak → WAIT → user speaks → you speak → WAIT.
+6. If the user has not said anything yet, STAY SILENT and WAIT. Do NOT continue with a monologue.
+
 ########## CRITICAL RULE: WELCOME AND TEST FLOW ##########
 When the session starts, NEVER jump straight into a test!
-Follow these steps IN ORDER in your first turn:
-1. Introduce yourself: "Hello, I am Nöra, your cognitive screening assistant."
-2. Ask how the user is feeling and have a brief warm-up chat.
-3. Briefly explain that you will do 4 short tests together (verbal fluency, story recall, visual recognition, orientation).
-4. Say "Whenever you are ready, we can begin" and WAIT for explicit confirmation.
-5. ONLY after the user says "ready/yes/okay/let's go" should you move to Test 1.
+In your FIRST turn, say ONLY this and STOP:
+→ "Hello, I am Nöra, your cognitive screening assistant. How are you?"
+→ Then go COMPLETELY SILENT. WAIT for the user's reply. Do NOT continue without a reply.
+
+After the user replies, in your SECOND turn:
+→ Briefly explain you will do 4 short tests together (1-2 sentences).
+→ Say "Whenever you are ready, we can begin" and STOP.
+→ WAIT for the user to say "ready/yes/okay".
+
 ⚠️ Do NOT explain or start Test 1 until the user explicitly confirms!
+⚠️ During welcome, do NOT mention specific test details like "verbal fluency" or "letter". Just give a general overview.
 
 ########## CRITICAL RULE: TRANSITION BETWEEN TESTS (TRANSITION AGENT) ##########
 After completing each test, NEVER jump directly to the next test!
@@ -307,9 +342,15 @@ When a message starts with TIMER_COMPLETE: or TIMER_STOPPED::
 - Start only after "TRANSITION_READY:" message.
 - Never invent stories yourself.
 - Always call generate_story to receive a unique story.
+
+⚠️ CRITICAL - TELL THE STORY WITHOUT INTERRUPTION:
+When telling the story, do NOT pause, do NOT take breaks, do NOT ask questions mid-story. Tell the story from start to finish in ONE CONTINUOUS speech.
+If the user says something while you are telling the story, FINISH the story anyway. Never leave the story incomplete.
+After the story ends, clearly say "That is the end of the story." to mark completion.
+
 1. Explain the test.
 2. Call generate_story.
-3. Tell the returned story exactly as provided.
+3. Tell the returned story exactly as provided. Tell it FLUENTLY without stopping until done.
 4. ⚠️ CRITICAL: Tell the story ONLY ONCE! Do NOT repeat, summarize, or remind the story.
    - If the user asks "tell it again": "I'm sorry, test rules only allow me to tell the story once. Please tell me as much as you remember."
    - NEVER repeat the story a second time — it invalidates the test.
@@ -618,10 +659,10 @@ class GeminiLiveSession {
         realtimeInputConfig: {
           automaticActivityDetection: {
             disabled: false,
-            startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_HIGH,
-            endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_LOW,
-            prefixPaddingMs: 20,
-            silenceDurationMs: 500,
+            startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_MEDIUM,
+            endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_HIGH,
+            prefixPaddingMs: 60,
+            silenceDurationMs: 1200,
           },
         },
         systemInstruction: {
@@ -660,13 +701,13 @@ class GeminiLiveSession {
       // Session kurulduktan sonra başlangıç mesajı gönder
       log.info('Gemini Live session established', { sessionId: this.sessionId });
       
-      // Otomatik başlangıç - Nöra sıcak bir şekilde karşılasın
+      // Otomatik başlangıç - Nöra SADECE kendini tanıtsın ve nasılsınız desin, SONRA SUSSUN
       log.info('Sending initial greeting', { sessionId: this.sessionId });
       this.geminiSession.sendRealtimeInput({
         text: pickText(
           this.language,
-          'Kullanici yeni baglandi. KARSILAMA KURALLARINA UY: 1) Kendini tanit, 2) Nasilsin diye sor, 3) Bugun 4 kisa test yapacaginizi acikla, 4) "Hazir oldugunuzda baslayalim" de ve ONAY BEKLE. ASLA direkt teste baslama.',
-          'A new user connected. FOLLOW WELCOME RULES: 1) Introduce yourself, 2) Ask how they feel, 3) Explain you will do 4 short tests today, 4) Say "Whenever you are ready we can begin" and WAIT for confirmation. NEVER start a test directly.'
+          'Kullanici yeni baglandi. SADECE su iki cumleyi soyle ve SUS: "Merhaba, ben Nora, bilissel tarama asistanınızım. Nasilsiniz?" — Baska HICBIR SEY soyleme. Test aciklamasi YAPMA. Harf, sozel akicilik gibi test detaylarindan BAHSETME. Sadece kendini tanit, nasilsin sor ve KULLANICININ CEVABIN BEKLE.',
+          'A new user connected. Say ONLY these two sentences and STOP: "Hello, I am Nora, your cognitive screening assistant. How are you?" — Do NOT say anything else. Do NOT explain tests. Do NOT mention letters, verbal fluency or any test details. Just introduce yourself, ask how they are, and WAIT for their reply.'
         ),
       });
       
@@ -761,7 +802,34 @@ class GeminiLiveSession {
 
     // Interrupted - kullanici ajanin sozunu kesti
     if (content.interrupted) {
-      log.info('Agent interrupted by user', { sessionId: this.sessionId, phase: this.brainAgent?.testPhase });
+      const phase = this.brainAgent?.testPhase;
+      const storyAgentDone = this.brainAgent?.storyRecallAgentDone;
+
+      // Hikaye anlatilirken (STORY_RECALL_ACTIVE + ajan henuz hikayeyi bitirmemis)
+      // interrupt oldu: frontend'e bildir ama ajana hikayeye devam etmesini soyle
+      if (phase === 'STORY_RECALL_ACTIVE' && !storyAgentDone) {
+        log.warn('Interrupt during story telling - ajana devam etmesini soyluyoruz', {
+          sessionId: this.sessionId,
+          phase,
+          storyAgentDone,
+        });
+        this.sendToClient({ type: 'interrupted' });
+        // Ajana hikayeye devam etmesini soyle
+        setTimeout(() => {
+          if (this.brainAgent?.testPhase === 'STORY_RECALL_ACTIVE' && !this.brainAgent?.storyRecallAgentDone) {
+            this.sendText(
+              pickText(
+                this.language,
+                'STORY_CONTINUE: Hikaye anlatimin kesildi! Hikayeyi KALDIGIN YERDEN devam ettir ve TAMAMLA. Hikayeyi bastan baslatma, sadece KALDIGIN YERDEN devam et.',
+                'STORY_CONTINUE: Your story was interrupted! CONTINUE telling the story from WHERE YOU LEFT OFF and COMPLETE it. Do NOT restart from the beginning, just continue from where you stopped.'
+              )
+            );
+          }
+        }, 500);
+        return;
+      }
+
+      log.info('Agent interrupted by user', { sessionId: this.sessionId, phase });
       this.sendToClient({ type: 'interrupted' });
     }
   }
@@ -772,31 +840,34 @@ class GeminiLiveSession {
     for (const fc of toolCall.functionCalls) {
       log.info('Tool call executing', { sessionId: this.sessionId, tool: fc.name, args: fc.args });
 
-      // submit_story_recall guard: kullanici son konustuktan sonra minimum 5 saniye gecmeli
-      // ve recalledStory bos/cok kisa olmamali
+      // submit_story_recall guard: kullanici onay vermeden veya son 3s icinde konusuyorsa blokla
       if (fc.name === 'submit_story_recall' && this.brainAgent) {
         const lastUserAt = this.brainAgent.storyRecallLastUserAt;
         const sinceLastUser = lastUserAt ? Date.now() - lastUserAt : Infinity;
         const recalledStory = (fc.args?.recalledStory || '').trim();
-        const MIN_SILENCE_BEFORE_SUBMIT = 2000;
+        const submitAllowed = this.brainAgent.storyRecallSubmitAllowed;
 
-        if (sinceLastUser < MIN_SILENCE_BEFORE_SUBMIT) {
-          log.warn('submit_story_recall BLOCKED: kullanici henuz konusuyor veya yeni durdu', {
+        if (!submitAllowed || sinceLastUser < 3000) {
+          const reason = !submitAllowed ? 'no_user_confirmation' : 'user_recently_speaking';
+          log.warn(`submit_story_recall BLOCKED: ${reason}`, {
             sessionId: this.sessionId,
-            sinceLastUserMs: sinceLastUser,
+            submitAllowed,
+            sinceLastUserMs: Math.round(sinceLastUser),
             recalledLength: recalledStory.length,
           });
-          const guardResult = { blocked: true, reason: 'user_recently_speaking' };
+          const guardResult = { blocked: true, reason };
           functionResponses.push({ name: fc.name, id: fc.id, response: guardResult });
           this.sendTextToLive(
             pickText(
               this.language,
-              'STORY_RECALL_GUARD: submit_story_recall REDDEDILDI cunku kullanici henuz konusuyordu veya yeni durdu. ' +
-                'Kullaniciya "Anlatmaniz bitti mi? Cevabinizi bu sekilde isleme alayim mi?" diye sor. ' +
-                'Kullanici EVET derse tekrar submit_story_recall cagir. HAYIR derse dinlemeye devam et.',
-              'STORY_RECALL_GUARD: submit_story_recall was REJECTED because the user was still speaking or just stopped. ' +
-                'Ask the user "Are you done? Should I process your answer as is?" ' +
-                'If user says YES, call submit_story_recall again. If NO, keep listening.'
+              'STORY_RECALL_GUARD: submit_story_recall REDDEDILDI! Kullanicidan onay alinmadi. ' +
+                'ONCE kullaniciya "Anlatmaniz bitti mi? Cevabinizi bu sekilde isleme alayim mi?" diye sor. ' +
+                'Kullanicinin EVET demesini BEKLE. Kullanici evet dedikten SONRA tekrar submit_story_recall cagir. ' +
+                'ASLA kullanicinin cevabini beklemeden submit_story_recall cagirma!',
+              'STORY_RECALL_GUARD: submit_story_recall was REJECTED! No user confirmation received. ' +
+                'FIRST ask the user "Are you done? Should I process your answer as is?" ' +
+                'WAIT for the user to say YES. Only AFTER user confirms, call submit_story_recall again. ' +
+                'NEVER call submit_story_recall without waiting for user response!'
             )
           );
           continue;

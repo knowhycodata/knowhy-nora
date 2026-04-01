@@ -166,6 +166,7 @@ class BrainAgent {
     this.storyRecallInactivityInterval = null;
     this.STORY_RECALL_WARN_MS = parsePositiveInt(process.env.TEST2_INACTIVITY_WARN_MS, 35000);
     this.STORY_RECALL_TIMEOUT_MS = parsePositiveInt(process.env.TEST2_INACTIVITY_TIMEOUT_MS, 60000);
+    this.storyRecallSubmitAllowed = false; // kullanici onay verene kadar submit bloklenir
 
     // Transition agent state
     this.transitionAttempts = 0;
@@ -178,6 +179,13 @@ class BrainAgent {
     this.userBuffer = '';
     this.bufferResetTimeout = null;
     this.BUFFER_WINDOW_MS = 5000;
+
+    // Karsilama korumasi: session baslangicinda belirli bir sure boyunca
+    // IDLE → VERBAL_FLUENCY_WAITING gecisini engelle (ajan karsilama yaparken
+    // "hazir misiniz" gibi kelimeleri test baslangici olarak algilamamasi icin)
+    this.sessionStartedAt = Date.now();
+    this.GREETING_GUARD_MS = parsePositiveInt(process.env.GREETING_GUARD_MS, 15000);
+    this.greetingDone = false; // kullanici ilk kez konusunca true olur
 
     this.orientationUserInputBuffer = '';
     this.orientationLastUserAt = 0;
@@ -306,7 +314,27 @@ class BrainAgent {
   }
 
   _handleIdle(role, text, agentBuf) {
+    // Kullanici ilk kez konustugunda greetingDone = true yap
+    if (role === 'user' && !this.greetingDone) {
+      this.greetingDone = true;
+      log.info('Greeting guard: kullanici ilk kez konustu, karsilama tamamlandi', { sessionId: this.sessionId });
+    }
+
     if (role !== 'agent') return;
+
+    // Karsilama korumasi: session basladigindan beri GREETING_GUARD_MS gecmemisse
+    // VE kullanici henuz konusmamissa, faz gecisi yapma
+    const sinceStart = Date.now() - this.sessionStartedAt;
+    if (!this.greetingDone && sinceStart < this.GREETING_GUARD_MS) {
+      log.debug('Greeting guard aktif - IDLE gecisi engellendi', {
+        sessionId: this.sessionId,
+        sinceStartMs: sinceStart,
+        guardMs: this.GREETING_GUARD_MS,
+        text: text.substring(0, 60),
+      });
+      return;
+    }
+
     if (this._containsAny(agentBuf, KEYWORDS.verbalIntro) || this._containsAny(text, KEYWORDS.verbalIntro)) {
       log.info('Faz geçişi: IDLE → VERBAL_FLUENCY_WAITING (agent test açıklaması algılandı)', { sessionId: this.sessionId });
       this.testPhase = 'VERBAL_FLUENCY_WAITING';
@@ -843,6 +871,32 @@ class BrainAgent {
         this._startStoryRecallWatcher();
       }
     }
+
+    // Ajan "bitti mi? / isleme alayim mi?" sorusunu sordugunu tespit et
+    if (role === 'agent' && this.testPhase === 'STORY_RECALL_ACTIVE') {
+      const confirmQuestion = ['bitti mi', 'bitirdiniz mi', 'işleme alayım', 'isleme alayim',
+        'dikkate alayım', 'dikkate alayim', 'kaydedeyim mi', 'are you done', 'should i process',
+        'shall i record', 'should i record'];
+      if (this._containsAny(text, confirmQuestion) || this._containsAny(agentBuf, confirmQuestion)) {
+        log.info('Ajan onay sorusu sordu - submit_story_recall bloklandi, kullanici onayi bekleniyor', { sessionId: this.sessionId });
+        this.storyRecallSubmitAllowed = false;
+      }
+    }
+
+    // Kullanici onay verdigini tespit et ("evet", "tamam", "al", "kaydet")
+    if (role === 'user' && this.testPhase === 'STORY_RECALL_ACTIVE' && !this.storyRecallSubmitAllowed) {
+      const confirmYes = ['evet', 'tamam', 'olur', 'kaydet', 'al', 'yes', 'okay', 'ok', 'go ahead', 'sure'];
+      const confirmNo = ['hayır', 'hayir', 'bekle', 'daha var', 'devam', 'no', 'wait', 'not yet'];
+      if (this._containsAny(text, confirmYes)) {
+        log.info('Kullanici onay verdi - submit_story_recall izin verildi', { sessionId: this.sessionId });
+        this.storyRecallSubmitAllowed = true;
+      } else if (this._containsAny(text, confirmNo)) {
+        log.info('Kullanici hayir dedi - dinlemeye devam', { sessionId: this.sessionId });
+        this.storyRecallSubmitAllowed = false;
+        this.storyRecallWarningSent = false;
+        if (this.storyRecallLastUserAt) this.storyRecallLastUserAt = Date.now();
+      }
+    }
   }
 
   _handleVisualTestActive(role, text, rawText) {
@@ -979,6 +1033,7 @@ class BrainAgent {
         silenceMs,
       });
       this._stopStoryRecallWatcher();
+      this.storyRecallSubmitAllowed = true;
       this.sendTextToLive(
         pickText(
           this.language,
