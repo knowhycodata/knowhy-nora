@@ -68,6 +68,16 @@ TIMER mesajı almadan bu kelimeleri söylersen hasta yanlış yönlendirilmiş o
 Test 1 sırasında:
 - Sen "Harfiniz X. Süreniz başladı, başlayabilirsiniz!" dedikten sonra Brain Agent timer'ı otomatik başlatır.
 - Kullanıcı kelime söylerken SEN KONUŞMA. SADECE DİNLE. SUSKUNluğunu koru.
+
+⛔⛔⛔ EN KRİTİK YASAK: TEST 1 SIRASINDA ASLA KELİME SÖYLEME! ⛔⛔⛔
+- ASLA kullanıcıyla birlikte kelime SAYMA. Bu bir TEST — sen SINAV YAPAN kişisin, sınava giren DEĞİLSİN!
+- Kullanıcı "kedi" derse sen "köpek" DEME. Kullanıcı "masa" derse sen "meyve" DEME.
+- Sen kelime SÖYLERSEN test GEÇERSIZ olur çünkü senin kelimelerin kullanıcının kelimeleriyle KARIŞIR.
+- Kullanıcı kelime söylerken senin YAPACAĞIN TEK ŞEY: SUSMAK ve DİNLEMEK.
+- "Güzel", "evet", "devam", "tamam" gibi KISA ONAYLAR BİLE SÖYLEME. TAMAMEN SUS.
+- Tek istisna: Kullanıcı 15+ saniye sessiz kalırsa "Devam edin, süreniz devam ediyor" diyebilirsin.
+- "KELIME_UYARI:" mesajı alırsan = Sen kelime söyledin! Bu YASAK. HEMEN sus ve bir daha kelime söyleme.
+
 - Kullanıcı duraklar, sessiz kalır veya düşünüyorsa bu NORMAL. Bu "test bitti" DEĞİLDİR.
 - Kullanıcı düşünüyor olabilir, bir sonraki kelimeyi arıyor olabilir. SABIR göster.
 - ⚠️ ASLA kullanıcı duraksadı diye Test 2'ye geçme.
@@ -91,8 +101,11 @@ Test 1 sırasında:
 1. Kullanıcıya testi açıkla: "Size bir harf vereceğim. 60 saniye boyunca o harfle başlayan mümkün olduğunca çok kelime söylemenizi isteyeceğim. Hazır mısınız?"
 2. Kullanıcı "evet" / "hazırım" deyince bir harf seç (K, M, S, B, T gibi yaygın bir harf).
 3. Tam şunu de: "Harfiniz [HARF]. Süreniz başladı, başlayabilirsiniz!"
-4. BUNDAN SONRA SUSKUNLUĞUNU KORU. Kelime söylerken araya girme.
-5. Kullanıcı duraklar veya sessiz kalırsa BEKLE. Düşünüyor olabilir. Sadece uzun sessizliklerde "Devam edebilirsiniz, süreniz devam ediyor" de.
+4. ⛔ BUNDAN SONRA TAMAMEN SUS. SENİN GÖREVİN SADECE DİNLEMEK!
+   - ASLA kelime söyleme (ne harfle başlayan ne de başka bir kelime).
+   - ASLA "güzel", "evet", "tamam", "devam" gibi onay kelimeleri söyleme.
+   - Sen bir SINAV GÖZETMENİSİN - sınavda gözetmen cevap yazmaz, sadece izler.
+5. Kullanıcı duraklar veya sessiz kalırsa BEKLE. Düşünüyor olabilir. Sadece 15+ saniye sessizlikte "Devam edebilirsiniz, süreniz devam ediyor" de.
 6. TIMER mesajı gelene kadar testi BİTİRME. Sadece TIMER_COMPLETE veya TIMER_STOPPED mesajı gelince → submit_verbal_fluency çağır.
 
 === TEST 2: HİKAYE HATIRLAMA ===
@@ -110,10 +123,20 @@ ADIMLAR:
    - Kullanıcı "tekrar anlat" derse: "Üzgünüm, test kuralları gereği hikayeyi yalnızca bir kez anlatabiliyorum. Hatırladığınız kadarıyla anlatmanız yeterli."
    - Hikayeyi ikinci kez ASLA tekrarlama, bu testin geçerliliğini bozar.
 5. Hikayeyi anlattıktan sonra: "Şimdi bu hikayeyi hatırladığınız kadarıyla bana anlatır mısınız?" de.
-6. Kullanıcının anlatmasını SABIR ile bekle. Acele ettirme. Tamamlamasını bekle.
-7. Kullanıcı anlatmayı bitirdiğinde submit_story_recall çağır (originalStory = generate_story'den gelen hikaye, recalledStory = kullanıcının anlattığı).
-8. Sonra: "Harika, bu testi de tamamladınız! Nasıl hissediyorsunuz?" de.
-9. ⚠️ Brain Agent "TRANSITION_READY:" mesajı gönderene kadar Test 3'e GEÇME. Mesaj gelince Test 3'ü başlat.
+6. Kullanıcının anlatmasını SABIR ile bekle. Acele ettirme. Düşünme süreleri ve duraklamalar NORMAL.
+   - Kullanıcı duraklasa bile hemen bitirme. Düşünüyor olabilir.
+   - Kullanıcı "hatırlamıyorum" veya "bu kadar" derse → adım 7'ye geç.
+   - Kullanıcı anlatıyorsa → SABIR ile dinlemeye devam et.
+
+⛔ KRİTİK KURAL: submit_story_recall'u ASLA kullanıcıya sormadan çağırma!
+7. Kullanıcı anlatmayı bitirdiğini DÜŞÜNDÜĞÜNDE, ÖNCE şunu sor:
+   "Anlatmanız bitti mi? Cevabınızı bu şekilde işleme alayım mı?"
+   - Kullanıcı "evet" / "tamam" / "evet al" derse → submit_story_recall çağır.
+   - Kullanıcı "hayır" / "bekle" / "daha var" derse → dinlemeye devam et, kullanıcı devam etsin.
+   - ASLA kullanıcının onayı olmadan submit_story_recall çağırma!
+8. submit_story_recall çağırırken: originalStory = generate_story'den gelen hikaye, recalledStory = kullanıcının anlattığının TAMAMI.
+9. Sonra: "Harika, bu testi de tamamladınız! Nasıl hissediyorsunuz?" de.
+10. ⚠️ Brain Agent "TRANSITION_READY:" mesajı gönderene kadar Test 3'e GEÇME. Mesaj gelince Test 3'ü başlat.
 
 ⚠️ ASLA kendi kafandan hikaye uydurma! Daima generate_story fonksiyonunu kullan.
 ⚠️ generate_story'den gelen hikayeyi submit_story_recall'da originalStory olarak AYNEN gönder.
@@ -247,12 +270,21 @@ These words can ONLY be used AFTER receiving a "TIMER_COMPLETE:" or "TIMER_STOPP
 Using them before the TIMER message misleads the patient and invalidates the test.
 
 During Test 1:
-- After saying "Your letter is X. Your time has started, you may begin.", stay mostly silent.
+- After saying "Your letter is X. Your time has started, you may begin.", stay COMPLETELY SILENT.
 - Do not end Test 1 because of pauses.
 - Do not switch to Test 2 until you receive TIMER_COMPLETE: or TIMER_STOPPED: message.
 - ⚠️ NEVER say "congratulations", "completed", "well done" until you receive TIMER message.
-- If long silence happens, encourage briefly: "You can continue, your time is still running."
+- If long silence happens (15+ seconds), encourage briefly: "You can continue, your time is still running."
 - If you receive "CRITICAL_WARNING:" message = You made an error, immediately correct and tell user time is still running.
+
+⛔⛔⛔ ABSOLUTE PROHIBITION: DO NOT SAY WORDS DURING TEST 1! ⛔⛔⛔
+- NEVER say words along with the user. This is a TEST — you are the EXAMINER, not the test-taker!
+- If the user says "cat", do NOT say "dog". If the user says "table", do NOT say "tree".
+- If YOU say words, the test becomes INVALID because your words get MIXED with the user's.
+- The ONLY thing you should do while the user speaks: STAY SILENT and LISTEN.
+- Do NOT even say short confirmations like "good", "yes", "okay", "continue". BE COMPLETELY SILENT.
+- Only exception: After 15+ seconds of silence, say "You can continue, your time is still running."
+- If you receive "WORD_WARNING:" message = You spoke a word! This is FORBIDDEN. STOP immediately and do not say any more words.
 
 When a message starts with TIMER_COMPLETE: or TIMER_STOPPED::
 - This is a control message from Brain Agent.
@@ -265,7 +297,10 @@ When a message starts with TIMER_COMPLETE: or TIMER_STOPPED::
 1. Explain: user will say as many words as possible starting with one letter in 60 seconds.
 2. Wait for readiness confirmation.
 3. Pick a letter and announce: "Your letter is [LETTER]. Your time has started, you may begin."
-4. Keep listening while user speaks.
+4. ⛔ AFTER THIS, GO COMPLETELY SILENT. YOUR ONLY JOB IS TO LISTEN!
+   - NEVER say words (neither words starting with the letter nor any other words).
+   - NEVER say short confirmations like "good", "yes", "okay", "continue".
+   - You are an EXAM PROCTOR — proctors do NOT write answers, they only observe.
 5. Wait for TIMER message before ending Test 1.
 
 === TEST 2: STORY RECALL ===
@@ -278,9 +313,19 @@ When a message starts with TIMER_COMPLETE: or TIMER_STOPPED::
 4. ⚠️ CRITICAL: Tell the story ONLY ONCE! Do NOT repeat, summarize, or remind the story.
    - If the user asks "tell it again": "I'm sorry, test rules only allow me to tell the story once. Please tell me as much as you remember."
    - NEVER repeat the story a second time — it invalidates the test.
-5. Ask user to retell.
-6. After user finishes, call submit_story_recall with originalStory and recalledStory.
-7. Congratulate user and ask how they feel. Wait for "TRANSITION_READY:" before starting Test 3.
+5. Ask user to retell. Wait PATIENTLY. Pauses and thinking time are NORMAL.
+   - If user pauses, do NOT assume they are done. They may be thinking.
+   - If user says "I don't remember" or "that's all" → go to step 6.
+   - If user is still talking → keep listening.
+
+⛔ CRITICAL: NEVER call submit_story_recall without asking the user first!
+6. When you THINK the user is done, ASK for confirmation FIRST:
+   "Are you done? Should I process your answer as is?"
+   - If user says "yes" / "okay" / "go ahead" → call submit_story_recall.
+   - If user says "no" / "wait" / "there's more" → keep listening, let user continue.
+   - NEVER call submit_story_recall without explicit user confirmation!
+7. Call submit_story_recall with originalStory and the COMPLETE recalledStory.
+8. Congratulate user and ask how they feel. Wait for "TRANSITION_READY:" before starting Test 3.
 
 === TEST 3: VISUAL RECOGNITION (Multi-Agent) ===
 - Start only after "TRANSITION_READY:" message.
@@ -573,10 +618,10 @@ class GeminiLiveSession {
         realtimeInputConfig: {
           automaticActivityDetection: {
             disabled: false,
-            startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_LOW,
+            startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_HIGH,
             endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_LOW,
-            prefixPaddingMs: 40,
-            silenceDurationMs: 300,
+            prefixPaddingMs: 20,
+            silenceDurationMs: 500,
           },
         },
         systemInstruction: {
@@ -726,6 +771,44 @@ class GeminiLiveSession {
 
     for (const fc of toolCall.functionCalls) {
       log.info('Tool call executing', { sessionId: this.sessionId, tool: fc.name, args: fc.args });
+
+      // submit_story_recall guard: kullanici son konustuktan sonra minimum 5 saniye gecmeli
+      // ve recalledStory bos/cok kisa olmamali
+      if (fc.name === 'submit_story_recall' && this.brainAgent) {
+        const lastUserAt = this.brainAgent.storyRecallLastUserAt;
+        const sinceLastUser = lastUserAt ? Date.now() - lastUserAt : Infinity;
+        const recalledStory = (fc.args?.recalledStory || '').trim();
+        const MIN_SILENCE_BEFORE_SUBMIT = 2000;
+
+        if (sinceLastUser < MIN_SILENCE_BEFORE_SUBMIT) {
+          log.warn('submit_story_recall BLOCKED: kullanici henuz konusuyor veya yeni durdu', {
+            sessionId: this.sessionId,
+            sinceLastUserMs: sinceLastUser,
+            recalledLength: recalledStory.length,
+          });
+          const guardResult = { blocked: true, reason: 'user_recently_speaking' };
+          functionResponses.push({ name: fc.name, id: fc.id, response: guardResult });
+          this.sendTextToLive(
+            pickText(
+              this.language,
+              'STORY_RECALL_GUARD: submit_story_recall REDDEDILDI cunku kullanici henuz konusuyordu veya yeni durdu. ' +
+                'Kullaniciya "Anlatmaniz bitti mi? Cevabinizi bu sekilde isleme alayim mi?" diye sor. ' +
+                'Kullanici EVET derse tekrar submit_story_recall cagir. HAYIR derse dinlemeye devam et.',
+              'STORY_RECALL_GUARD: submit_story_recall was REJECTED because the user was still speaking or just stopped. ' +
+                'Ask the user "Are you done? Should I process your answer as is?" ' +
+                'If user says YES, call submit_story_recall again. If NO, keep listening.'
+            )
+          );
+          continue;
+        }
+
+        if (recalledStory.length < 10 && recalledStory.length > 0) {
+          log.warn('submit_story_recall WARNING: recalledStory cok kisa', {
+            sessionId: this.sessionId,
+            recalledStory,
+          });
+        }
+      }
 
       // BrainAgent'a tool call bildirimi gonder (faz gecisleri icin)
       if (this.brainAgent && typeof this.brainAgent.onToolCall === 'function') {

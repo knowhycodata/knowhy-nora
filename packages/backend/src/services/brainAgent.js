@@ -321,6 +321,8 @@ class BrainAgent {
     this.transitionAttempts = 0;
     this.transitionStartedAt = Date.now();
     this._transitionAdvancing = false;
+    this.userBuffer = '';
+    this.agentBuffer = '';
 
     if (this.transitionTimeoutHandle) clearTimeout(this.transitionTimeoutHandle);
     this.transitionTimeoutHandle = setTimeout(() => {
@@ -346,9 +348,13 @@ class BrainAgent {
     if (role !== 'user') return;
     if (this._transitionAdvancing) return;
 
-    const combined = `${text} ${userBuf}`;
-    const isReady = this._containsAny(combined, KEYWORDS.userReady);
-    const isNotReady = this._containsAny(combined, KEYWORDS.userNotReady);
+    // Transition basladiktan sonra en az 3 saniye bekle (Gemini'nin soru sormasi icin)
+    const sinceTransitionStart = Date.now() - (this.transitionStartedAt || 0);
+    if (sinceTransitionStart < 3000) return;
+
+    // Sadece mevcut text'e bak, userBuf eski testlerden kalma veri icerebilir
+    const isReady = this._containsAny(text, KEYWORDS.userReady);
+    const isNotReady = this._containsAny(text, KEYWORDS.userNotReady);
 
     if (isReady) {
       log.info('Kullanıcı hazır - transition tamamlanıyor', {
@@ -562,6 +568,30 @@ class BrainAgent {
     }
 
     if (role === 'agent' && this.timerActive) {
+      // Ajan kelime sayiyor mu? (hedef harfle baslayan kelime soyluyorsa)
+      if (this.targetLetter && this._agentIsSayingWords(text)) {
+        log.warn('KRITIK: Ajan Test 1 sirasinda kelime sayiyor!', {
+          sessionId: this.sessionId,
+          text: text.substring(0, 120),
+          targetLetter: this.targetLetter,
+        });
+        this.agentBuffer = '';
+        this.sendTextToLive(
+          pickText(
+            this.language,
+            `KELIME_UYARI: SEN AZ ONCE KELİME SOYLEDİN! "${text.trim()}" — Bu YASAK! ` +
+              'Sen SINAV GOZETMENİSİN, kelime sayma senin isin DEGIL. ' +
+              'Kullanici kelime sayiyor, sen SADECE dinliyorsun. HEMEN SUS ve bir daha kelime soyleme. ' +
+              'Hicbir onay, hicbir kelime, hicbir yorum yapma. TAMAMEN SESSIZ KAL.',
+            `WORD_WARNING: YOU JUST SAID A WORD! "${text.trim()}" — This is FORBIDDEN! ` +
+              'You are the EXAM PROCTOR, saying words is NOT your job. ' +
+              'The user is saying words, you are ONLY listening. STOP IMMEDIATELY and do not say any more words. ' +
+              'No confirmations, no words, no comments. BE COMPLETELY SILENT.'
+          )
+        );
+        return;
+      }
+
       const dangerInText = this._containsAny(text, KEYWORDS.dangerWhileTimer);
       const dangerInBuf = this._containsAny(this.agentBuffer, KEYWORDS.dangerWhileTimer);
       if (dangerInText || dangerInBuf) {
@@ -638,6 +668,36 @@ class BrainAgent {
     }
 
     return addedWords;
+  }
+
+  /**
+   * Ajan Test 1 sirasinda hedef harfle baslayan kelime soyluyor mu?
+   * Izin verilen kisa tesvik cumlelerini ("devam edin", "suresiniz devam ediyor") haric tutar.
+   */
+  _agentIsSayingWords(text) {
+    if (!this.targetLetter || !text) return false;
+
+    const cleaned = text.toLocaleLowerCase(getLocale(this.language)).trim();
+    if (cleaned.length <= 2) return false;
+
+    const allowedPatterns = [
+      'devam', 'süre', 'sure', 'zaman', 'time', 'continue', 'running',
+      'bekle', 'düşün', 'dusun', 'seconds', 'saniye', 'dakika',
+    ];
+    if (allowedPatterns.some(p => cleaned.includes(p))) return false;
+
+    const words = cleaned.split(/[\s,\.;!?]+/).filter(w => w.length > 1);
+    const letter = this.targetLetter.toLocaleLowerCase(getLocale(this.language));
+
+    let matchCount = 0;
+    for (const word of words) {
+      const w = word.replace(/^[^a-zA-ZÇĞİÖŞÜçğıöşü]+/, '');
+      if (w.length > 1 && w.startsWith(letter) && !COMMON_FILLER_WORDS.has(w)) {
+        matchCount++;
+      }
+    }
+
+    return matchCount >= 1;
   }
 
   _startTimer() {
@@ -902,8 +962,12 @@ class BrainAgent {
       this.sendTextToLive(
         pickText(
           this.language,
-          'STORY_RECALL_HINT: Kullanici bir suredir sessiz. Hikaye hatirlama testi devam ediyor. Kullaniciyi nazikce tesvik et: "Hatirladiginiz kadarini anlatabilirsiniz, eksik olsa da sorun degil."',
-          'STORY_RECALL_HINT: The user has been silent for a while. Story recall test is still active. Gently encourage: "You can tell as much as you remember, it is okay if it is incomplete."'
+          'STORY_RECALL_HINT: Kullanici bir suredir sessiz. Hikaye hatirlama testi devam ediyor. ' +
+            'Kullaniciyi nazikce tesvik et: "Hatirladiginiz kadarini anlatabilirsiniz, eksik olsa da sorun degil." ' +
+            'UYARI: Henuz submit_story_recall CAGIRMA! Kullanici konusmaya devam edebilir.',
+          'STORY_RECALL_HINT: The user has been silent for a while. Story recall test is still active. ' +
+            'Gently encourage: "You can tell as much as you remember, it is okay if it is incomplete." ' +
+            'WARNING: Do NOT call submit_story_recall yet! The user may continue speaking.'
         )
       );
       return;
@@ -918,14 +982,16 @@ class BrainAgent {
       this.sendTextToLive(
         pickText(
           this.language,
-          'STORY_RECALL_TIMEOUT: Kullanici uzun suredir sessiz. Hikaye hatirlama testini mevcut bilgiyle tamamla. ' +
-            'Eger kullanici hicbir sey soylemediyse bos cevap olarak submit_story_recall cagir. ' +
-            'submit_story_recall cagirdiktan sonra kullaniciya "Tebrikler, ikinci testi tamamladınız!" de ve nasil hissettigini sor. ' +
-            'Ucuncu teste hazir olup olmadigini sor, onay bekle.',
-          'STORY_RECALL_TIMEOUT: The user has been silent for too long. Complete the story recall test with available info. ' +
-            'If user said nothing, call submit_story_recall with empty response. ' +
-            'After submit_story_recall, say "Congratulations on completing the second test!" and ask how they feel. ' +
-            'Ask if they are ready for Test 3. Wait for confirmation.'
+          'STORY_RECALL_TIMEOUT: Kullanici uzun suredir sessiz. ' +
+            'Kullaniciya "Anlatmaniz bitti mi? Cevabinizi bu sekilde isleme alayim mi?" diye sor. ' +
+            'Kullanici EVET derse veya hicbir sey soylemediyse submit_story_recall cagir. ' +
+            'HAYIR derse biraz daha bekle. ' +
+            'submit_story_recall cagirdiktan sonra "Tebrikler, ikinci testi tamamladiniz!" de ve nasil hissettigini sor.',
+          'STORY_RECALL_TIMEOUT: The user has been silent for too long. ' +
+            'Ask the user "Are you done? Should I process your answer as is?" ' +
+            'If user says YES or said nothing at all, call submit_story_recall. ' +
+            'If NO, wait a bit more. ' +
+            'After submit_story_recall, say "Congratulations on completing the second test!" and ask how they feel.'
         )
       );
     }
