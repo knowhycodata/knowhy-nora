@@ -13,6 +13,7 @@ export default function Dashboard() {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sessionLanguagePicked, setSessionLanguagePicked] = useState(false);
+  const [showQuietWarning, setShowQuietWarning] = useState(false);
 
   const statusConfig = useMemo(
     () => ({
@@ -46,6 +47,11 @@ export default function Dashboard() {
 
   const handleStartSession = () => {
     if (!sessionLanguagePicked) return;
+    setShowQuietWarning(true);
+  };
+
+  const handleQuietConfirm = () => {
+    setShowQuietWarning(false);
     sessionStorage.setItem('session_language_confirmed', '1');
     navigate('/session');
   };
@@ -195,6 +201,48 @@ export default function Dashboard() {
           )}
         </div>
       </main>
+
+      {/* ─── Sessiz Ortam Uyarı Modalı ─── */}
+      {showQuietWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="relative w-full max-w-md mx-4 bg-white rounded-2xl shadow-2xl p-8 animate-in fade-in">
+            {/* İkon */}
+            <div className="w-14 h-14 mx-auto rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center mb-5">
+              <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-amber-500">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+            </div>
+
+            {/* Başlık */}
+            <h3 className="text-lg font-semibold text-gray-900 text-center">
+              {t('dashboard.quietWarningTitle')}
+            </h3>
+
+            {/* Mesaj */}
+            <p className="mt-3 text-sm text-gray-600 text-center leading-relaxed">
+              {t('dashboard.quietWarningMessage')}
+            </p>
+
+            {/* Butonlar */}
+            <div className="mt-7 flex flex-col gap-2.5">
+              <button
+                onClick={handleQuietConfirm}
+                className="w-full py-3 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-800 transition-all"
+              >
+                {t('dashboard.quietWarningConfirm')}
+              </button>
+              <button
+                onClick={() => setShowQuietWarning(false)}
+                className="w-full py-3 bg-gray-100 text-gray-600 text-sm font-medium rounded-xl hover:bg-gray-200 transition-all"
+              >
+                {t('dashboard.quietWarningCancel')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

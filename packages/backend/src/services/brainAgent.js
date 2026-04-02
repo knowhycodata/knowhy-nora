@@ -440,9 +440,9 @@ class BrainAgent {
             'TRANSITION_NUDGE: Kullanıcı birkaç kez hazır olmadığını belirtti. ' +
               'Nazikce "Sizin tempönüze saygı duyuyorum ama devam etmemiz gerekiyor. ' +
               'Endişelenmeyin, çok kısa ve basit olacak." de ve sonraki teste başla.',
-            'TRANSITION_NUDGE: The user has expressed not being ready multiple times. ' +
-              'Gently say "I respect your pace but we need to continue. ' +
-              'Don\'t worry, it will be quick and simple." and start the next test.'
+            'TRANSITION_NUDGE: The user has expressed not being ready a few times. ' +
+              'Gently and warmly say something like: "I completely understand, and there is absolutely no pressure. ' +
+              'How about we just give it a try? It\'s really short and easy, and we can stop anytime you like." Then start the next test.'
           )
         );
         setTimeout(() => {
@@ -463,10 +463,13 @@ class BrainAgent {
         ]
         : [
           'TRANSITION_SUPPORT: The user is not feeling well or not ready. ' +
-            'Be empathetic: "I understand, no rush. We\'ll continue when you feel ready. ' +
-            'The test is very short and easy, nothing to worry about." Ask if they are ready again.',
-          'TRANSITION_SUPPORT: The user is still hesitant. "That\'s completely normal, many people feel the same. ' +
-            'Just a few simple questions, there are no wrong answers. Are you ready?" ',
+            'Be warm and understanding: "That\'s perfectly okay, take all the time you need. ' +
+            'Whenever you feel comfortable, we can gently move forward. The next part is really short and easy — nothing to worry about at all." ' +
+            'Then ask softly if they would like to continue.',
+          'TRANSITION_SUPPORT: The user is still hesitant. Reassure them warmly: ' +
+            '"You know, many people feel the same way, so that\'s completely normal. ' +
+            'It\'s just a few simple questions with no right or wrong answers. ' +
+            'Would you like to give it a try whenever you feel ready?" ',
         ];
       const idx = Math.min(this.transitionAttempts - 1, encouragements.length - 1);
       this.sendTextToLive(encouragements[idx]);
@@ -496,8 +499,8 @@ class BrainAgent {
             this.language,
             'TRANSITION_READY: Kullanıcı hazır. Şimdi Test 1 (Sözel Akıcılık) testini açıkla ve başlat. ' +
               'Bir harf seç ve kuralları anlat.',
-            'TRANSITION_READY: The user is ready. Now explain and start Test 1 (Verbal Fluency). ' +
-              'Pick a letter and explain the rules.'
+            'TRANSITION_READY: The user is ready. Now warmly introduce and start Test 1 (Verbal Fluency). ' +
+              'Pick a letter and explain the rules in a friendly, encouraging way.'
           )
         );
         break;
@@ -517,7 +520,7 @@ class BrainAgent {
               'Şimdi Test 2 (Hikaye Hatırlama) testini açıkla: "Size kısa bir hikaye anlatacağım, dikkatle dinleyin." ' +
               'Sonra HEMEN generate_story() fonksiyonunu çağır. Hikayeyi kendin UYDURMA.',
             'TRANSITION_READY: The user is ready for Test 2. ' +
-              'Explain Test 2 (Story Recall): "I will tell you a short story, listen carefully." ' +
+              'Warmly introduce Test 2 (Story Recall): "For this next one, I\'m going to tell you a short story — just listen and enjoy it." ' +
               'Then IMMEDIATELY call generate_story(). Do NOT make up a story yourself.'
           )
         );
@@ -538,7 +541,7 @@ class BrainAgent {
               'Şimdi Test 3 (Görsel Tanıma) testini açıkla: "Ekranınıza sırayla görseller göstereceğim, ne olduğunu söylemenizi isteyeceğim." ' +
               'Sonra HEMEN start_visual_test() fonksiyonunu çağır.',
             'TRANSITION_READY: The user is ready for Test 3. ' +
-              'Explain Test 3 (Visual Recognition): "I will show images on your screen, tell me what you see." ' +
+              'Warmly introduce Test 3 (Visual Recognition): "Alright, for this next part I\'ll show some pictures on your screen — just tell me what you see, nice and easy!" ' +
               'Then IMMEDIATELY call start_visual_test().'
           )
         );
@@ -561,7 +564,7 @@ class BrainAgent {
               'Şimdi Test 4 (Yönelim) testini başlat. ' +
               'Kullanıcıya zaman ve mekânla ilgili 7 soru sor (yıl, ay, gün, mevsim, şehir, ülke, bulunduğu yer).',
             'TRANSITION_READY: The user is ready for the last test. ' +
-              'Now start Test 4 (Orientation). ' +
+              'Warmly introduce Test 4 (Orientation): "We\'re almost done! Just a few easy questions about today\'s date and where you are — nothing tricky at all." ' +
               'Ask the user 7 questions about time and place (year, month, day, season, city, country, current location).'
           )
         );
@@ -681,7 +684,7 @@ class BrainAgent {
             `CRITICAL_WARNING: TIMER IS STILL ACTIVE! ${remaining} seconds left. ` +
               'Test 1 is STILL RUNNING. Do NOT say "congratulations" or "completed"! ' +
               'You do NOT have authority to end the test. Only TIMER_COMPLETE or TIMER_STOPPED message can end it. ' +
-              'Now tell the user "Your time is still running, you can keep saying words."'
+              'Now gently tell the user: "Your time is still going — feel free to keep saying any words that come to mind!"'
           )
         );
       }
@@ -839,8 +842,8 @@ class BrainAgent {
         `${prefix}: ${isTimeout ? 'The 60-second timer is over.' : stopReasonTextEn} ` +
           `User words: [${wordList}]. Total ${this.collectedWords.length} words. ` +
           `Now call submit_verbal_fluency with words: [${wordJson}], targetLetter: "${letter}", sessionId: "${this.sessionId}", durationSeconds: ${elapsed}. ` +
-          'After submit_verbal_fluency, say "Congratulations on completing the first test!" ' +
-          'Then ask how they feel and whether they are ready for Test 2. Wait for explicit confirmation.'
+          'After submit_verbal_fluency, warmly congratulate: "Well done, you did a great job on that one!" ' +
+          'Then gently ask how they are feeling and whether they would like to move on to the next activity. Wait for their response.'
       )
     );
 
@@ -870,10 +873,25 @@ class BrainAgent {
 
   _checkAutoStopByInactivity() {
     if (!this.timerActive || !this.timerStartTime) return;
-    if (!this.lastUserSpeechAt) return;
 
     const now = Date.now();
     const elapsed = now - this.timerStartTime;
+
+    // Kullanici hic konusmadiysa, 15 saniye sonra bir tesvik gonder
+    if (!this.lastUserSpeechAt) {
+      if (!this.inactivityWarningSent && elapsed >= this.INACTIVITY_WARN_AFTER_MS) {
+        this.inactivityWarningSent = true;
+        this.sendTextToLive(
+          pickText(
+            this.language,
+            'TIMER_HINT: Kullanici henuz kelime soylemedi. Kisa bir tesvik ver: "Baslamak icin harfle baslayan kelimeler soyleyin, sureniz devam ediyor."',
+            'TIMER_HINT: The user has not started yet. Gently encourage them: "Whenever you\'re ready, just start saying any words that begin with your letter — your time is running, no rush!"'
+          )
+        );
+      }
+      return;
+    }
+
     if (elapsed < this.MIN_AUTO_STOP_ELAPSED_MS) return;
 
     const baseForProgress = this.lastProgressAt || this.lastUserSpeechAt;
@@ -886,7 +904,7 @@ class BrainAgent {
         pickText(
           this.language,
           'TIMER_HINT: Kullanici bir suredir sessiz. Test 1 hala aktif. Kisa bir tesvik cumlesi kur: "Devam edebilirsiniz, sureniz devam ediyor."',
-          'TIMER_HINT: The user has been silent for a while. Test 1 is still active. Give a short encouragement: "You can continue, your time is still running."'
+          'TIMER_HINT: The user has been silent for a while. Test 1 is still active. Gently encourage: "Take your time — your timer is still going, so feel free to say any more words that come to mind."'
         )
       );
       return;

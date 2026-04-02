@@ -57,6 +57,8 @@ export const translations = {
       medicalNote: 'Bu tarama tıbbi teşhis yerine geçmez; bilgilendirme ve takip amacıyla sunulur.',
       footerLabel: 'knowhy - Nöra',
       footerLink: 'knowhy.co',
+      altSystemBanner: 'Ses kaydı yükleyerek tarama yapmak ister misiniz?',
+      altSystemCTA: 'Alternatifi Dene',
     },
     auth: {
       loginTitle: 'Giriş Yap',
@@ -94,6 +96,10 @@ export const translations = {
       },
       languageCardTitle: 'Ajan dili seçimi (zorunlu)',
       languageCardDesc: 'Ajanla konuşmaya başlamadan önce Türkçe veya English seçin.',
+      quietWarningTitle: 'Sessiz Ortam Gerekli',
+      quietWarningMessage: 'Ajanın sağlıklı çalışabilmesi için sessiz bir ortamda olduğunuzdan emin olun. Arka plan gürültüsü, müzik veya başka sesler sonuçları olumsuz etkileyebilir.',
+      quietWarningConfirm: 'Sessiz Ortamdayım, Başla',
+      quietWarningCancel: 'Vazgeç',
     },
     agentSession: {
       assistantSubtitle: 'Bilişsel Tarama Asistanı',
@@ -271,6 +277,8 @@ export const translations = {
       medicalNote: 'This screening is not a medical diagnosis; it is provided for informational follow-up.',
       footerLabel: 'knowhy - Nöra',
       footerLink: 'knowhy.co',
+      altSystemBanner: 'Would you like to try screening by uploading audio?',
+      altSystemCTA: 'Try Alternative',
     },
     auth: {
       loginTitle: 'Sign In',
@@ -308,6 +316,10 @@ export const translations = {
       },
       languageCardTitle: 'Agent language selection (required)',
       languageCardDesc: 'Choose Turkish or English before starting the live agent.',
+      quietWarningTitle: 'Quiet Environment Required',
+      quietWarningMessage: 'Please make sure you are in a quiet environment for accurate results. Background noise, music, or other sounds may negatively affect the screening outcome.',
+      quietWarningConfirm: 'I\'m in a Quiet Place, Start',
+      quietWarningCancel: 'Cancel',
     },
     agentSession: {
       assistantSubtitle: 'Cognitive Screening Assistant',
