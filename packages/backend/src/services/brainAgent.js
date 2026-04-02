@@ -180,6 +180,7 @@ class BrainAgent {
     this.targetLetter = null;
     this.collectedWords = [];
     this.timerActive = false;
+    this.verbalFluencyCompleted = false; // Test 1 tamamlandı mı — tekrar başlatmayı engeller
     this.timerStartTime = null;
     this.timerDuration = 60;
     this.timerId = null;
@@ -381,6 +382,10 @@ class BrainAgent {
     }
 
     if (this._containsAny(agentBuf, KEYWORDS.verbalIntro) || this._containsAny(text, KEYWORDS.verbalIntro)) {
+      if (this.verbalFluencyCompleted) {
+        log.info('IDLE → VF geçişi ENGELLENDİ: Test 1 zaten tamamlandı', { sessionId: this.sessionId });
+        return;
+      }
       log.info('Faz geçişi: IDLE → VERBAL_FLUENCY_WAITING (agent test açıklaması algılandı)', { sessionId: this.sessionId });
       this.testPhase = 'VERBAL_FLUENCY_WAITING';
       this._tryExtractLetter(agentBuf);
@@ -820,6 +825,7 @@ class BrainAgent {
     if (!this.timerActive) return;
 
     this.timerActive = false;
+    this.verbalFluencyCompleted = true; // Test 1 tamamlandı — tekrar başlatılamaz
     this._stopInactivityWatcher();
     this.userBuffer = ''; // Test bitti, buffer temizle
     if (this.timerTimeout) {
