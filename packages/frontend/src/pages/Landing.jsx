@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import BrandMark from '../components/BrandMark';
 import LanguageSwitcher from '../components/LanguageSwitcher';
@@ -6,7 +5,6 @@ import { useLanguage } from '../context/LanguageContext';
 
 export default function Landing() {
   const { t } = useLanguage();
-  const [showAltBanner, setShowAltBanner] = useState(true);
   const metaItems = [
     t('landing.metaTests'),
     t('landing.metaLanguages'),
@@ -66,33 +64,22 @@ export default function Landing() {
       <div className="page-glow page-glow-left" />
       <div className="page-glow page-glow-right" />
 
-      {/* Alternatif Sistem Banner */}
-      {showAltBanner && (
-        <div className="relative z-20 bg-gradient-to-r from-[#577264] to-[#6e8a7b] px-4 py-3 text-center">
-          <div className="mx-auto flex max-w-6xl items-center justify-center gap-3">
-            <span className="text-sm font-medium text-white/90">
-              {t('landing.altSystemBanner')}
-            </span>
-            <a
-              href="https://alzheimerai.plus"
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-full bg-white/20 px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-white/30"
-            >
-              {t('landing.altSystemCTA')}
-            </a>
-            <button
-              onClick={() => setShowAltBanner(false)}
-              className="ml-2 rounded-full p-1 text-white/60 transition hover:text-white"
-              aria-label={t('common.close')}
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+      <div className="relative z-20 border-b border-[rgba(20,33,29,0.08)] bg-[rgba(110,138,123,0.12)] px-4 py-2.5">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-2 text-center sm:gap-3">
+          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[#476156]">
+            {t('landing.altSystemBadge')}
+          </span>
+          <span className="text-sm text-[#2f463c]">{t('landing.altSystemBanner')}</span>
+          <a
+            href="https://alzheimerai.plus"
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-full border border-[rgba(20,33,29,0.16)] bg-white/85 px-3.5 py-1 text-xs font-semibold text-[#1f332b] transition hover:bg-white"
+          >
+            {t('landing.altSystemCTA')}
+          </a>
         </div>
-      )}
+      </div>
 
       <header className="relative z-10 border-b border-[rgba(20,33,29,0.08)]">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5">

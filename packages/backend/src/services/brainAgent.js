@@ -54,17 +54,23 @@ const KEYWORDS = {
     'bu kadar', 'artık yeter', 'artik yeter', 'daha fazla yok', 'başka yok',
     'baska yok', 'o kadar', 'durduralım', 'durduralim',
     'süreyi durdur', 'sureyi durdur',
-    'stop now', 'that is enough', 'i am done', "i'm done",
-    'no more words', "i can't think of more", 'nothing else',
+    'stop now', 'that is enough', 'i am done', "i'm done", 'im done',
+    'no more words', "i can't think of more", 'i cant think of more', 'nothing else',
     'thats all', "that's all", "that's it", 'thats it', 'i am finished',
-    "i'm finished", 'done now', 'i have no more',
+    "i'm finished", 'im finished', 'done now', 'i have no more',
     'cannot think of more', "can't remember more", 'cant remember more',
     'bu kadar yeter', 'daha fazla soyleyemiyorum', 'baska soyleyemiyorum',
     'testi bitir', 'testi bitirelim', 'yeter artik', 'yeter artık',
     'stop the test', 'end the test', 'stop the timer', 'stop timer',
-    'i give up', 'no more', 'i cannot think', "can't think of any",
+    'i give up', 'no more', 'i cannot think', "can't think of any", 'cant think of any',
     'enough', 'that is it', 'that is all', 'i am out of words',
     'nothing comes to mind', 'my mind is blank', 'i got nothing',
+    'all i can think of', 'thats all i can', 'thats all i got',
+    'all i got', 'all i have', 'think of any more', 'think of anymore',
+    'cant think', 'cannot think', 'i am stuck', 'im stuck',
+    'thats about it', 'that is about it', 'nothing more',
+    'i dont know any more', 'i dont know anymore',
+    'thats everything', 'that is everything',
   ],
   dangerWhileTimer: [
     'hikaye', 'test 2', 'ikinci test', 'testi tamamladınız', 'testi tamamladiniz',
@@ -252,10 +258,18 @@ class BrainAgent {
     });
 
     if (this.bufferResetTimeout) clearTimeout(this.bufferResetTimeout);
-    this.bufferResetTimeout = setTimeout(() => {
-      this.agentBuffer = '';
-      this.userBuffer = '';
-    }, this.BUFFER_WINDOW_MS);
+    // Test 1 aktifken userBuffer'ı temizleme — parçalı transkriptlerin birleşmesi lazım
+    if (this.testPhase !== 'VERBAL_FLUENCY_ACTIVE') {
+      this.bufferResetTimeout = setTimeout(() => {
+        this.agentBuffer = '';
+        this.userBuffer = '';
+      }, this.BUFFER_WINDOW_MS);
+    } else {
+      // Test 1 aktifken sadece agentBuffer temizle, userBuffer kalsın
+      this.bufferResetTimeout = setTimeout(() => {
+        this.agentBuffer = '';
+      }, this.BUFFER_WINDOW_MS);
+    }
 
     this._analyzePhase(role, cleanText);
   }
@@ -614,9 +628,18 @@ class BrainAgent {
       const elapsed = this.timerStartTime ? Date.now() - this.timerStartTime : 0;
       const MIN_ELAPSED_FOR_USER_STOP = 15000;
 
+      // Stop tespiti: hem anlık text hem de birikmiş userBuffer'dan kontrol et
+      // userBuffer parçalı transkriptleri birleştirdiği için çok kelimelik ifadeleri yakalar
+      // Son 200 karakterlik pencere yeterli ("that's all I can think of" gibi ifadeler için)
+      const recentUserBuf = userBuf.length > 200 ? userBuf.slice(-200) : userBuf;
       if (elapsed >= MIN_ELAPSED_FOR_USER_STOP &&
-          (this._containsAny(text, KEYWORDS.userStop) || this._containsAny(userBuf, KEYWORDS.userStop))) {
-        log.info('Stop sinyali algılandı', { sessionId: this.sessionId, text, elapsedMs: elapsed });
+          (this._containsAny(text, KEYWORDS.userStop) || this._containsAny(recentUserBuf, KEYWORDS.userStop))) {
+        log.info('Stop sinyali algılandı', {
+          sessionId: this.sessionId,
+          text,
+          recentBuf: recentUserBuf.substring(0, 120),
+          elapsedMs: elapsed,
+        });
         this._stopTimer('user_stop');
         return;
       }
@@ -782,6 +805,7 @@ class BrainAgent {
     this.lastUserSpeechAt = null;
     this.lastProgressAt = null;
     this.inactivityWarningSent = false;
+    this.userBuffer = ''; // Test başında temiz başla
 
     this.sendToClient({
       type: 'timer_started',
@@ -802,6 +826,7 @@ class BrainAgent {
 
     this.timerActive = false;
     this._stopInactivityWatcher();
+    this.userBuffer = ''; // Test bitti, buffer temizle
     if (this.timerTimeout) {
       clearTimeout(this.timerTimeout);
       this.timerTimeout = null;
