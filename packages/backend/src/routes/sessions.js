@@ -56,6 +56,7 @@ router.get('/:id', authenticate, async (req, res) => {
 });
 
 // Oturumu tamamla ve toplam skoru hesapla
+// Fallback: Results sayfası yüklendiğinde session COMPLETED değilse bu endpoint çağrılır
 router.patch('/:id/complete', authenticate, async (req, res) => {
   try {
     const session = await prisma.testSession.findFirst({
@@ -67,15 +68,36 @@ router.patch('/:id/complete', authenticate, async (req, res) => {
       return res.status(404).json({ error: 'Oturum bulunamadı' });
     }
 
-    // Toplam skoru hesapla
-    const totalScore = session.tests.reduce((sum, test) => {
-      return sum + (test.score / test.maxScore) * 25; // Her test 25 puan üzerinden
-    }, 0);
+    // Zaten COMPLETED ise tekrar güncelleme — mevcut veriyi dön
+    if (session.status === 'COMPLETED') {
+      return res.json({ session });
+    }
+
+    // Minimum 4 ana test gerekli (VIDEO_ANALYSIS opsiyonel)
+    const CORE_TEST_TYPES = ['VERBAL_FLUENCY', 'STORY_RECALL', 'VISUAL_RECOGNITION', 'ORIENTATION'];
+    const completedTestTypes = new Set(session.tests.map((t) => t.testType));
+    const missingCoreTests = CORE_TEST_TYPES.filter((t) => !completedTestTypes.has(t));
+
+    if (missingCoreTests.length > 0) {
+      return res.status(400).json({
+        error: `Eksik testler var: ${missingCoreTests.join(', ')}`,
+        missingTests: missingCoreTests,
+      });
+    }
+
+    // Normalize edilmiş ortalama (handleCompleteSession ile tutarlı)
+    const percentage = session.tests.length > 0
+      ? session.tests.reduce((sum, t) => {
+          return sum + (t.maxScore > 0 ? (t.score / t.maxScore) * 100 : 0);
+        }, 0) / session.tests.length
+      : 0;
+
+    const totalScore = Math.round(percentage * 100) / 100;
 
     // Risk seviyesini belirle
     let riskLevel = 'LOW';
-    if (totalScore < 50) riskLevel = 'HIGH';
-    else if (totalScore < 75) riskLevel = 'MODERATE';
+    if (percentage < 50) riskLevel = 'HIGH';
+    else if (percentage < 75) riskLevel = 'MODERATE';
 
     const updatedSession = await prisma.testSession.update({
       where: { id: session.id },

@@ -48,12 +48,12 @@ const cameraAccessStates = new Map(); // sessionId -> camera state
 const orientationGuardStates = new Map(); // sessionId -> { blockedCount, lastRepromptAt, lastQuestionType }
 const ORIENTATION_GUARD_REPROMPT_COOLDOWN_MS = 5000;
 const ORIENTATION_GUARD_FALLBACK_THRESHOLD = 3;
+// VIDEO_ANALYSIS opsiyoneldir — 4 ana test zorunlu, video analiz ek bilgi sağlar
 const REQUIRED_TEST_TYPES = [
   'VERBAL_FLUENCY',
   'STORY_RECALL',
   'VISUAL_RECOGNITION',
   'ORIENTATION',
-  'VIDEO_ANALYSIS',
 ];
 
 function registerSessionLanguage(sessionId, language) {
@@ -907,10 +907,13 @@ async function handleCompleteSession({ sessionId }) {
   });
   const cameraState = getCameraAccessState(sessionId);
   const completedTestTypes = new Set(testResults.map((result) => result.testType));
-  const missingTests = REQUIRED_TEST_TYPES.filter((testType) => !completedTestTypes.has(testType));
 
-  if (missingTests.length > 0) {
-    const cameraBlocked = missingTests.includes('VIDEO_ANALYSIS') && cameraState.required && !cameraState.frameReceived;
+  // 4 ana test zorunlu, VIDEO_ANALYSIS opsiyonel
+  const CORE_TEST_TYPES = ['VERBAL_FLUENCY', 'STORY_RECALL', 'VISUAL_RECOGNITION', 'ORIENTATION'];
+  const missingCoreTests = CORE_TEST_TYPES.filter((testType) => !completedTestTypes.has(testType));
+
+  if (missingCoreTests.length > 0) {
+    const cameraBlocked = cameraState.required && !cameraState.frameReceived;
     const baseBlockedResult = cameraBlocked
       ? getCameraBlockedResult(language, cameraState)
       : {
@@ -919,14 +922,14 @@ async function handleCompleteSession({ sessionId }) {
           reason: 'MISSING_TEST_RESULTS',
           message: pickText(
             language,
-            `Oturum henuz tamamlanamiyor. Eksik testler var: ${missingTests.join(', ')}.`,
-            `The session cannot be completed yet. Missing test results: ${missingTests.join(', ')}.`
+            `Oturum henuz tamamlanamiyor. Eksik testler var: ${missingCoreTests.join(', ')}.`,
+            `The session cannot be completed yet. Missing test results: ${missingCoreTests.join(', ')}.`
           ),
         };
 
     return {
       ...baseBlockedResult,
-      missingTests,
+      missingTests: missingCoreTests,
     };
   }
 

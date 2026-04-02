@@ -86,10 +86,32 @@ export default function Results() {
   );
 
   useEffect(() => {
-    api.get(`/sessions/${id}`)
-      .then((res) => setSession(res.data.session))
-      .catch(() => navigate('/dashboard'))
-      .finally(() => setLoading(false));
+    let cancelled = false;
+    async function loadSession() {
+      try {
+        const res = await api.get(`/sessions/${id}`);
+        let sess = res.data.session;
+
+        // Fallback: Session COMPLETED değilse REST API ile tamamlamayı dene
+        if (sess && sess.status !== 'COMPLETED') {
+          try {
+            const completeRes = await api.patch(`/sessions/${id}/complete`);
+            sess = completeRes.data.session;
+          } catch (completeErr) {
+            // Eksik test varsa veya başka hata — mevcut session ile devam et
+            console.warn('Session auto-complete failed:', completeErr?.response?.data?.error || completeErr.message);
+          }
+        }
+
+        if (!cancelled) setSession(sess);
+      } catch {
+        if (!cancelled) navigate('/dashboard');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    loadSession();
+    return () => { cancelled = true; };
   }, [id, navigate]);
 
   if (loading) {
@@ -166,7 +188,7 @@ export default function Results() {
           <span className="text-xs text-gray-400">{t('results.detailsSubtitle')}</span>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
-          {session.tests?.map((test) => {
+          {session.tests?.filter((test) => testTypeLabels[test.testType]).map((test) => {
             const pct = test.maxScore > 0 ? (test.score / test.maxScore) * 100 : 0;
             const barColor =
               pct >= 75 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-rose-500';
