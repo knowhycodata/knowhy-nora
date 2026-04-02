@@ -672,10 +672,7 @@ class BrainAgent {
               'Sen SINAV GOZETMENİSİN, kelime sayma senin isin DEGIL. ' +
               'Kullanici kelime sayiyor, sen SADECE dinliyorsun. HEMEN SUS ve bir daha kelime soyleme. ' +
               'Hicbir onay, hicbir kelime, hicbir yorum yapma. TAMAMEN SESSIZ KAL.',
-            `WORD_WARNING: YOU JUST SAID A WORD! "${text.trim()}" — This is FORBIDDEN! ` +
-              'You are the EXAM PROCTOR, saying words is NOT your job. ' +
-              'The user is saying words, you are ONLY listening. STOP IMMEDIATELY and do not say any more words. ' +
-              'No confirmations, no words, no comments. BE COMPLETELY SILENT.'
+            `WORD_WARNING: STOP. You said "${text.trim()}". Say NOTHING. Be SILENT.`
           )
         );
         return;
@@ -704,10 +701,8 @@ class BrainAgent {
               'Test 1 DEVAM EDIYOR. "Tebrikler" veya "tamamladiniz" gibi ifadeler kullanma! ' +
               'Testi bitirme yetkisi sende DEGIL. Sadece TIMER_COMPLETE veya TIMER_STOPPED mesaji gelince testi bitirebilirsin. ' +
               'Simdi kullaniciya "Sureniz devam ediyor, kelime soylemeye devam edebilirsiniz" de.',
-            `CRITICAL_WARNING: TIMER IS STILL ACTIVE! ${remaining} seconds left. ` +
-              'Test 1 is STILL RUNNING. Do NOT say "congratulations" or "completed"! ' +
-              'You do NOT have authority to end the test. Only TIMER_COMPLETE or TIMER_STOPPED message can end it. ' +
-              'Now gently tell the user: "Your time is still going — feel free to keep saying any words that come to mind!"'
+            `CRITICAL_WARNING: TIMER ACTIVE (${remaining}s left). ` +
+              'STOP TALKING. Say ONLY: "Your time is still going." Then be SILENT.'
           )
         );
       }
@@ -910,7 +905,7 @@ class BrainAgent {
           pickText(
             this.language,
             'TIMER_HINT: Kullanici henuz kelime soylemedi. Kisa bir tesvik ver: "Baslamak icin harfle baslayan kelimeler soyleyin, sureniz devam ediyor."',
-            'TIMER_HINT: The user has not started yet. Gently encourage them: "Whenever you\'re ready, just start saying any words that begin with your letter — your time is running, no rush!"'
+            'TIMER_HINT: Say ONLY: "Go ahead, your time is running." Then be SILENT.'
           )
         );
       }
@@ -929,7 +924,7 @@ class BrainAgent {
         pickText(
           this.language,
           'TIMER_HINT: Kullanici bir suredir sessiz. Test 1 hala aktif. Kisa bir tesvik cumlesi kur: "Devam edebilirsiniz, sureniz devam ediyor."',
-          'TIMER_HINT: The user has been silent for a while. Test 1 is still active. Gently encourage: "Take your time — your timer is still going, so feel free to say any more words that come to mind."'
+          'TIMER_HINT: Say ONLY: "Your time is still going." Then be SILENT.'
         )
       );
       return;
