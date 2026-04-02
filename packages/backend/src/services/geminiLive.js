@@ -148,15 +148,11 @@ ADIMLAR:
    - Kullanıcı "hatırlamıyorum" veya "bu kadar" derse → adım 7'ye geç.
    - Kullanıcı anlatıyorsa → SABIR ile dinlemeye devam et.
 
-⛔ KRİTİK KURAL: submit_story_recall'u ASLA kullanıcıya sormadan çağırma!
-7. Kullanıcı anlatmayı bitirdiğini DÜŞÜNDÜĞÜNDE, ÖNCE şunu sor:
-   "Anlatmanız bitti mi? Cevabınızı bu şekilde işleme alayım mı?"
-   - Kullanıcı "evet" / "tamam" / "evet al" derse → submit_story_recall çağır.
-   - Kullanıcı "hayır" / "bekle" / "daha var" derse → dinlemeye devam et, kullanıcı devam etsin.
-   - ASLA kullanıcının onayı olmadan submit_story_recall çağırma!
-8. submit_story_recall çağırırken: originalStory = generate_story'den gelen hikaye, recalledStory = kullanıcının anlattığının TAMAMI.
-9. Sonra: "Harika, bu testi de tamamladınız! Nasıl hissediyorsunuz?" de.
-10. ⚠️ Brain Agent "TRANSITION_READY:" mesajı gönderene kadar Test 3'e GEÇME. Mesaj gelince Test 3'ü başlat.
+7. Kullanıcı "bitirdim", "bu kadar", "hatırlamıyorum" gibi bir şey dediğinde veya anlatmayı bıraktığında → HEMEN submit_story_recall çağır.
+   - Ekstra onay sorma! Kullanıcı zaten bitirdiğini söyledi.
+   - submit_story_recall çağırırken: originalStory = generate_story'den gelen hikaye, recalledStory = kullanıcının anlattığının TAMAMI.
+8. Sonra: "Harika, bu testi de tamamladınız! Nasıl hissediyorsunuz?" de.
+9. ⚠️ Brain Agent "TRANSITION_READY:" mesajı gönderene kadar Test 3'e GEÇME. Mesaj gelince Test 3'ü başlat.
 
 ⚠️ ASLA kendi kafandan hikaye uydurma! Daima generate_story fonksiyonunu kullan.
 ⚠️ generate_story'den gelen hikayeyi submit_story_recall'da originalStory olarak AYNEN gönder.
@@ -348,14 +344,10 @@ After the story ends, clearly say "That is the end of the story." to mark comple
    - If user says "I don't remember" or "that's all" → go to step 6.
    - If user is still talking → keep listening.
 
-⛔ CRITICAL: NEVER call submit_story_recall without asking the user first!
-6. When you THINK the user is done, ASK for confirmation FIRST:
-   "Are you done? Should I process your answer as is?"
-   - If user says "yes" / "okay" / "go ahead" → call submit_story_recall.
-   - If user says "no" / "wait" / "there's more" → keep listening, let user continue.
-   - NEVER call submit_story_recall without explicit user confirmation!
-7. Call submit_story_recall with originalStory and the COMPLETE recalledStory.
-8. Congratulate user and ask how they feel. Wait for "TRANSITION_READY:" before starting Test 3.
+6. When the user says "I'm done", "that's all", "I don't remember more" or stops talking → IMMEDIATELY call submit_story_recall.
+   - Do NOT ask for extra confirmation! The user already indicated they are done.
+   - Call submit_story_recall with originalStory and the COMPLETE recalledStory.
+7. Congratulate user and ask how they feel. Wait for "TRANSITION_READY:" before starting Test 3.
 
 === TEST 3: VISUAL RECOGNITION ===
 - Start only after "TRANSITION_READY:" message.
@@ -422,38 +414,38 @@ function buildSystemInstruction(language = 'tr') {
 const TOOL_DECLARATIONS = [
   {
     name: 'submit_verbal_fluency',
-    description: 'Sözel akıcılık testinin sonuçlarını kaydeder. 60 saniye içinde söylenen kelimeleri gönderir.',
+    description: 'Records verbal fluency test results. Submits words spoken within 60 seconds. / Sözel akıcılık testinin sonuçlarını kaydeder. 60 saniye içinde söylenen kelimeleri gönderir.',
     parameters: {
       type: 'object',
       properties: {
-        sessionId: { type: 'string', description: 'Test oturumu ID' },
+        sessionId: { type: 'string', description: 'Test session ID / Test oturumu ID' },
         words: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Kullanıcının söylediği kelimeler listesi',
+          description: 'List of words spoken by the user / Kullanıcının söylediği kelimeler listesi',
         },
-        targetLetter: { type: 'string', description: 'Hedef harf (örn: P)' },
-        durationSeconds: { type: 'number', description: 'Test süresi (saniye)' },
+        targetLetter: { type: 'string', description: 'Target letter (e.g. P) / Hedef harf (örn: P)' },
+        durationSeconds: { type: 'number', description: 'Test duration in seconds / Test süresi (saniye)' },
       },
       required: ['sessionId', 'words', 'targetLetter'],
     },
   },
   {
     name: 'submit_story_recall',
-    description: 'Hikaye hatırlama testinin sonuçlarını kaydeder.',
+    description: 'Records story recall test results. / Hikaye hatırlama testinin sonuçlarını kaydeder.',
     parameters: {
       type: 'object',
       properties: {
-        sessionId: { type: 'string', description: 'Test oturumu ID' },
-        originalStory: { type: 'string', description: 'Orijinal hikaye metni (generate_story ile alınan)' },
-        recalledStory: { type: 'string', description: 'Kullanıcının anlattığı hikaye' },
+        sessionId: { type: 'string', description: 'Test session ID / Test oturumu ID' },
+        originalStory: { type: 'string', description: 'Original story text (from generate_story) / Orijinal hikaye metni (generate_story ile alınan)' },
+        recalledStory: { type: 'string', description: 'Story retold by the user / Kullanıcının anlattığı hikaye' },
       },
       required: ['sessionId', 'originalStory', 'recalledStory'],
     },
   },
   {
     name: 'generate_story',
-    description: 'Test 2 için Gemini 3.1 Flash Lite ile anlık benzersiz hikaye üretir. Test 2 başlamadan ÖNCE bu fonksiyonu çağır ve gelen hikayeyi kullanıcıya anlat.',
+    description: 'Generates a unique story with Gemini 3.1 Flash Lite for Test 2. Call BEFORE starting Test 2 and tell the story to the user. / Test 2 için Gemini 3.1 Flash Lite ile anlık benzersiz hikaye üretir. Test 2 başlamadan ÖNCE bu fonksiyonu çağır ve gelen hikayeyi kullanıcıya anlat.',
     parameters: {
       type: 'object',
       properties: {
@@ -464,7 +456,7 @@ const TOOL_DECLARATIONS = [
   },
   {
     name: 'start_visual_test',
-    description: 'Görsel tanıma testini başlatır. VisualTestAgent koordinasyonunda çalışır. İlk görseli otomatik üretir ve ekranda gösterir. Bu fonksiyonu Test 3 başlangıcında bir kez çağır.',
+    description: 'Starts the visual recognition test. Automatically generates and displays the first image. Call once at the beginning of Test 3. / Görsel tanıma testini başlatır. İlk görseli otomatik üretir ve ekranda gösterir. Bu fonksiyonu Test 3 başlangıcında bir kez çağır.',
     parameters: {
       type: 'object',
       properties: {
@@ -476,7 +468,7 @@ const TOOL_DECLARATIONS = [
   {
     name: 'record_visual_answer',
     description:
-      'Kullanicinin soyledigi gorsel tanima cevabini kaydeder ve (varsa) sonraki gorseli gosterir. Test 3 akisinda kullanici cevap verdikten sonra ek onay sormadan cagir; userAnswer olarak kullanicinin ifadesini aynen veya ozetleyerek gonder.',
+      'Records the user visual recognition answer and advances to the next image if available. Call without additional confirmation after the user answers. / Kullanicinin gorsel tanima cevabini kaydeder ve sonraki gorsele gecer. Kullanici cevap verdikten sonra ek onay sormadan cagir.',
     parameters: {
       type: 'object',
       properties: {
@@ -489,7 +481,7 @@ const TOOL_DECLARATIONS = [
   },
   {
     name: 'submit_visual_recognition',
-    description: 'Gorsel tanima testinin tamamlanmis ve backend tarafinda dogrulanmis sonuclarini kaydeder. Tum gorseller kapanmadan cagirmazsin.',
+    description: 'Records the completed visual recognition test results. Do not call until all images are answered. / Gorsel tanima testinin tamamlanmis sonuclarini kaydeder. Tum gorseller cevaplanmadan cagirma.',
     parameters: {
       type: 'object',
       properties: {
@@ -512,7 +504,7 @@ const TOOL_DECLARATIONS = [
   },
   {
     name: 'submit_orientation',
-    description: 'Yönelim testinin sonuçlarını kaydeder.',
+    description: 'Records orientation test results. / Yönelim testinin sonuçlarını kaydeder.',
     parameters: {
       type: 'object',
       properties: {
@@ -535,7 +527,7 @@ const TOOL_DECLARATIONS = [
   },
   {
     name: 'start_video_analysis',
-    description: 'Test 4 başlangıcında kullanıcının kamerasını açar ve mimik/göz hareketi analizini başlatır. VideoAnalysisAgent koordinasyonunda çalışır.',
+    description: 'Opens user camera and starts facial/eye movement analysis for Test 4. / Test 4 başlangıcında kullanıcının kamerasını açar ve mimik/göz hareketi analizini başlatır.',
     parameters: {
       type: 'object',
       properties: {
@@ -546,7 +538,7 @@ const TOOL_DECLARATIONS = [
   },
   {
     name: 'stop_video_analysis',
-    description: 'Video analizini durdurur ve sonuçları kaydeder. Test 4 sorularından sonra çağır.',
+    description: 'Stops video analysis and records results. Call after all Test 4 questions. / Video analizini durdurur ve sonuçları kaydeder. Test 4 sorularından sonra çağır.',
     parameters: {
       type: 'object',
       properties: {
@@ -557,7 +549,7 @@ const TOOL_DECLARATIONS = [
   },
   {
     name: 'send_camera_command',
-    description: 'Kullanıcının kamerasına yönlendirme komutu gönderir. Yakınlaş, uzaklaş veya ortala.',
+    description: 'Sends a guidance command to the user camera: zoom in, zoom out, or center. / Kullanıcının kamerasına yönlendirme komutu gönderir: yakınlaş, uzaklaş veya ortala.',
     parameters: {
       type: 'object',
       properties: {
@@ -573,7 +565,7 @@ const TOOL_DECLARATIONS = [
   },
   {
     name: 'get_current_datetime',
-    description: 'DateTimeAgent aracılığıyla güncel tarih, saat, gün, ay, yıl ve mevsim bilgisini alır. Test 4 başında doğru cevapları öğrenmek için çağır.',
+    description: 'Gets current date, time, day, month, year and season via DateTimeAgent. Call at the start of Test 4 to learn correct answers. / DateTimeAgent aracılığıyla güncel tarih, saat, gün, ay, yıl ve mevsim bilgisini alır. Test 4 başında doğru cevapları öğrenmek için çağır.',
     parameters: {
       type: 'object',
       properties: {
@@ -584,7 +576,7 @@ const TOOL_DECLARATIONS = [
   },
   {
     name: 'verify_orientation_answer',
-    description: 'DateTimeAgent aracılığıyla kullanıcının yönelim cevabını doğrular. Her soru sonrası çağır.',
+    description: 'Verifies the user orientation answer via DateTimeAgent. Call after each question. / DateTimeAgent aracılığıyla kullanıcının yönelim cevabını doğrular. Her soru sonrası çağır.',
     parameters: {
       type: 'object',
       properties: {
@@ -601,7 +593,7 @@ const TOOL_DECLARATIONS = [
   },
   {
     name: 'complete_session',
-    description: 'Tüm testler tamamlandıktan sonra oturumu sonlandırır.',
+    description: 'Ends the session after all tests are completed. / Tüm testler tamamlandıktan sonra oturumu sonlandırır.',
     parameters: {
       type: 'object',
       properties: {
@@ -824,39 +816,9 @@ class GeminiLiveSession {
     for (const fc of toolCall.functionCalls) {
       log.info('Tool call executing', { sessionId: this.sessionId, tool: fc.name, args: fc.args });
 
-      // submit_story_recall guard: kullanici onay vermeden veya son 3s icinde konusuyorsa blokla
-      if (fc.name === 'submit_story_recall' && this.brainAgent) {
-        const lastUserAt = this.brainAgent.storyRecallLastUserAt;
-        const sinceLastUser = lastUserAt ? Date.now() - lastUserAt : Infinity;
+      // submit_story_recall: sadece cok kisa recalled story uyarisi
+      if (fc.name === 'submit_story_recall') {
         const recalledStory = (fc.args?.recalledStory || '').trim();
-        const submitAllowed = this.brainAgent.storyRecallSubmitAllowed;
-
-        if (!submitAllowed || sinceLastUser < 3000) {
-          const reason = !submitAllowed ? 'no_user_confirmation' : 'user_recently_speaking';
-          log.warn(`submit_story_recall BLOCKED: ${reason}`, {
-            sessionId: this.sessionId,
-            submitAllowed,
-            sinceLastUserMs: Math.round(sinceLastUser),
-            recalledLength: recalledStory.length,
-          });
-          const guardResult = { blocked: true, reason };
-          functionResponses.push({ name: fc.name, id: fc.id, response: guardResult });
-          this.sendText(
-            pickText(
-              this.language,
-              'STORY_RECALL_GUARD: submit_story_recall REDDEDILDI! Kullanicidan onay alinmadi. ' +
-                'ONCE kullaniciya "Anlatmaniz bitti mi? Cevabinizi bu sekilde isleme alayim mi?" diye sor. ' +
-                'Kullanicinin EVET demesini BEKLE. Kullanici evet dedikten SONRA tekrar submit_story_recall cagir. ' +
-                'ASLA kullanicinin cevabini beklemeden submit_story_recall cagirma!',
-              'STORY_RECALL_GUARD: submit_story_recall was REJECTED! No user confirmation received. ' +
-                'FIRST ask the user "Are you done? Should I process your answer as is?" ' +
-                'WAIT for the user to say YES. Only AFTER user confirms, call submit_story_recall again. ' +
-                'NEVER call submit_story_recall without waiting for user response!'
-            )
-          );
-          continue;
-        }
-
         if (recalledStory.length < 10 && recalledStory.length > 0) {
           log.warn('submit_story_recall WARNING: recalledStory cok kisa', {
             sessionId: this.sessionId,

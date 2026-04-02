@@ -19,11 +19,14 @@ const KEYWORDS = {
     'kelime söyle', 'hazır mısınız', 'hazir misiniz', 'harf vereceğim',
     'verbal fluency', 'first test', 'letter', 'say words',
     'are you ready', 'i will give you a letter',
+    'word fluency', 'say as many words', 'words starting with',
   ],
   verbalStart: [
     'başlayabilirsiniz', 'baslayabilirsiniz', 'süreniz başladı', 'sureniz basladi',
     'başlayın', 'baslayin', 'haydi başlayalım', 'haydi baslayalim',
     'you can start', 'your time has started', 'start now', 'timer started',
+    'you may begin', 'begin now', 'time has started', 'your time starts now',
+    'go ahead and start',
   ],
   userReady: [
     'hazır', 'hazir', 'evet', 'başla', 'basla', 'tamam', 'olur', 'tabii',
@@ -31,6 +34,8 @@ const KEYWORDS = {
     'başlayalım', 'baslayalim', 'gidebiliriz', 'hadi',
     'ready', 'yes', 'start', 'okay', 'ok', 'sure', "let's go",
     "i'm ready", 'im ready', 'go ahead', 'continue', "let's continue",
+    'yeah', 'yep', 'alright', 'of course', 'absolutely', 'bring it on',
+    "let's begin", "let's start", 'i am ready', 'sounds good',
   ],
   userNotReady: [
     'kötü', 'kotu', 'iyi değil', 'iyi degil', 'yorgun', 'hasta', 'korkuyorum',
@@ -38,6 +43,9 @@ const KEYWORDS = {
     'emin degilim', 'biraz bekle', 'bir dakika', 'dur', 'hayır', 'hayir',
     'not good', 'tired', 'scared', 'nervous', 'anxious', "i don't know",
     'not sure', 'wait', 'no', 'hold on', 'not ready',
+    'i feel bad', 'i am sick', 'i am afraid', 'worried', 'stressed',
+    'give me a moment', 'one moment', 'just a second', 'not yet',
+    'i need a break', 'i am not sure',
   ],
   userStop: [
     'durdur', 'duralım', 'duralim', 'bitirelim', 'tamam bitti',
@@ -53,6 +61,10 @@ const KEYWORDS = {
     'cannot think of more', "can't remember more", 'cant remember more',
     'bu kadar yeter', 'daha fazla soyleyemiyorum', 'baska soyleyemiyorum',
     'testi bitir', 'testi bitirelim', 'yeter artik', 'yeter artık',
+    'stop the test', 'end the test', 'stop the timer', 'stop timer',
+    'i give up', 'no more', 'i cannot think', "can't think of any",
+    'enough', 'that is it', 'that is all', 'i am out of words',
+    'nothing comes to mind', 'my mind is blank', 'i got nothing',
   ],
   dangerWhileTimer: [
     'hikaye', 'test 2', 'ikinci test', 'testi tamamladınız', 'testi tamamladiniz',
@@ -64,11 +76,16 @@ const KEYWORDS = {
     'test bitti', 'test is over', 'test is done', 'test is complete',
     'süre bitti', 'sure bitti', 'süreniz bitti', 'sureniz bitti',
     'time is up', "time's up", 'timer is over',
+    'great job', 'excellent', 'wonderful', 'amazing', 'fantastic',
+    'you did great', 'good job', 'nice job', 'timer is done',
+    'your time is over', 'timer has ended', 'time has run out',
   ],
   storyStart: [
     'hikaye', 'hikaye hatirlama', 'kısa bir hikaye', 'kisa bir hikaye',
     'dikkatle dinleyin', 'ikinci test', 'ikinci testimiz', 'ikinci teste',
     'story', 'story recall', 'listen carefully', 'second test',
+    'short story', 'tell you a story', 'recall test', 'memory test',
+    'i will tell you a story', 'listen to the story',
   ],
   storyRecallPrompt: [
     'hatırladığınız', 'hatirladiginiz', 'anlatır mısınız', 'anlatir misiniz',
@@ -77,28 +94,40 @@ const KEYWORDS = {
     'siz anlatın', 'siz anlatin', 'şimdi sıra sizde', 'simdi sira sizde',
     'can you retell', 'tell me what you remember', 'what do you remember',
     'please retell', 'your turn to tell', 'now tell me',
+    'tell me the story', 'retell the story', 'repeat the story',
+    'as much as you remember', 'what can you recall', 'now it is your turn',
+    'please tell me', 'go ahead and tell',
   ],
   visualStart: [
     'görsel tanıma', 'gorsel tanima', 'görsel test', 'gorsel test',
     'ekranınıza', 'ekraniniza', 'görsel göstereceğim', 'gorsel gosterecegim',
     'visual recognition', 'image test', 'i will show images', 'look at the screen',
+    'visual test', 'images on your screen', 'show you images', 'picture test',
+    'what do you see', 'look at the image',
   ],
   visualDone: [
     'görsel tanıma testini tamamladınız', 'gorsel tanima testini tamamladiniz',
     'son testimize', 'yönelim', 'yonelim',
     'visual recognition test is complete', 'last test', 'orientation test',
+    'visual test is complete', 'visual test is done', 'all images answered',
+    'completed the visual', 'finished the visual',
   ],
   orientationStart: [
     'yönelim', 'yonelim', 'son test', 'zaman ve mekan', 'tarih', 'günümüz', 'gunumuz',
     'sorular soracağım', 'sorular soracagim', 'kamera',
     'orientation', 'last test', 'time and place', 'date',
     'i will ask questions', 'camera',
+    'final test', 'orientation test', 'questions about time',
+    'questions about place', 'what day is it', 'what month',
   ],
   orientationDone: [
     'tüm testleri tamamladınız', 'tum testleri tamamladiniz',
     'oturumu sonlandır', 'oturumu sonlandir', 'testler tamamlandı', 'testler tamamlandi',
     'teşekkür ederim', 'tesekkur ederim', 'oturum tamamlandı', 'oturum tamamlandi',
     'all tests are completed', 'end the session', 'session completed', 'thank you',
+    'all tests are done', 'all tests completed', 'we are done', 'we are finished',
+    'tests are finished', 'session is over', 'session is complete',
+    'great job completing', 'you have completed all',
   ],
 };
 
@@ -108,7 +137,7 @@ const COMMON_FILLER_WORDS = new Set([
 
 const FILLER_WORDS_BY_LANGUAGE = {
   tr: new Set(['hım', 'hımm', 'hımmm', 'himm', 'ıı', 'ııı', 'ii', 'iii', 'sey', 'şey', 'yani', 'aslinda', 'aslında']),
-  en: new Set(['uhh', 'uhhh', 'ummm', 'erm', 'huh']),
+  en: new Set(['uhh', 'uhhh', 'ummm', 'erm', 'huh', 'like', 'well', 'so', 'you know', 'basically', 'actually', 'literally']),
 };
 
 function parsePositiveInt(value, fallback) {
@@ -168,7 +197,7 @@ class BrainAgent {
     this.storyRecallInactivityInterval = null;
     this.STORY_RECALL_WARN_MS = parsePositiveInt(process.env.TEST2_INACTIVITY_WARN_MS, 35000);
     this.STORY_RECALL_TIMEOUT_MS = parsePositiveInt(process.env.TEST2_INACTIVITY_TIMEOUT_MS, 60000);
-    this.storyRecallSubmitAllowed = false; // kullanici onay verene kadar submit bloklenir
+    this.storyRecallSubmitAllowed = true; // guard kaldirildi, submit her zaman izinli
 
     // Transition agent state
     this.transitionAttempts = 0;
@@ -883,29 +912,18 @@ class BrainAgent {
       }
     }
 
-    // Ajan "bitti mi? / isleme alayim mi?" sorusunu sordugunu tespit et
-    if (role === 'agent' && this.testPhase === 'STORY_RECALL_ACTIVE') {
-      const confirmQuestion = ['bitti mi', 'bitirdiniz mi', 'işleme alayım', 'isleme alayim',
-        'dikkate alayım', 'dikkate alayim', 'kaydedeyim mi', 'are you done', 'should i process',
-        'shall i record', 'should i record'];
-      if (this._containsAny(text, confirmQuestion) || this._containsAny(agentBuf, confirmQuestion)) {
-        log.info('Ajan onay sorusu sordu - submit_story_recall bloklandi, kullanici onayi bekleniyor', { sessionId: this.sessionId });
-        this.storyRecallSubmitAllowed = false;
-      }
-    }
-
-    // Kullanici onay verdigini tespit et ("evet", "tamam", "al", "kaydet")
-    if (role === 'user' && this.testPhase === 'STORY_RECALL_ACTIVE' && !this.storyRecallSubmitAllowed) {
-      const confirmYes = ['evet', 'tamam', 'olur', 'kaydet', 'al', 'yes', 'okay', 'ok', 'go ahead', 'sure'];
-      const confirmNo = ['hayır', 'hayir', 'bekle', 'daha var', 'devam', 'no', 'wait', 'not yet'];
-      if (this._containsAny(text, confirmYes)) {
-        log.info('Kullanici onay verdi - submit_story_recall izin verildi', { sessionId: this.sessionId });
+    // Kullanici "bitirdim/bu kadar" dediginde submit izni ver
+    if (role === 'user' && this.testPhase === 'STORY_RECALL_ACTIVE') {
+      const doneSignals = [
+        'bitirdim', 'bu kadar', 'o kadar', 'bitti', 'tamamdır', 'tamamdir',
+        'hatırlamıyorum', 'hatirlamiyorum', 'başka yok', 'baska yok',
+        "i'm done", 'i am done', "that's all", 'thats all', "that's it", 'thats it',
+        'i am finished', "i'm finished", 'nothing else', "i don't remember",
+        'i cant remember', "i can't remember", 'no more', 'done',
+      ];
+      if (this._containsAny(text, doneSignals)) {
+        log.info('Kullanici bitirdi sinyali verdi - submit_story_recall izin verildi', { sessionId: this.sessionId });
         this.storyRecallSubmitAllowed = true;
-      } else if (this._containsAny(text, confirmNo)) {
-        log.info('Kullanici hayir dedi - dinlemeye devam', { sessionId: this.sessionId });
-        this.storyRecallSubmitAllowed = false;
-        this.storyRecallWarningSent = false;
-        if (this.storyRecallLastUserAt) this.storyRecallLastUserAt = Date.now();
       }
     }
   }
@@ -1045,14 +1063,10 @@ class BrainAgent {
         pickText(
           this.language,
           'STORY_RECALL_TIMEOUT: Kullanici uzun suredir sessiz. ' +
-            'Kullaniciya "Anlatmaniz bitti mi? Cevabinizi bu sekilde isleme alayim mi?" diye sor. ' +
-            'Kullanici EVET derse veya hicbir sey soylemediyse submit_story_recall cagir. ' +
-            'HAYIR derse biraz daha bekle. ' +
+            'Hemen submit_story_recall cagir. Ekstra onay sorma. ' +
             'submit_story_recall cagirdiktan sonra "Tebrikler, ikinci testi tamamladiniz!" de ve nasil hissettigini sor.',
           'STORY_RECALL_TIMEOUT: The user has been silent for too long. ' +
-            'Ask the user "Are you done? Should I process your answer as is?" ' +
-            'If user says YES or said nothing at all, call submit_story_recall. ' +
-            'If NO, wait a bit more. ' +
+            'Call submit_story_recall immediately. Do not ask for extra confirmation. ' +
             'After submit_story_recall, say "Congratulations on completing the second test!" and ask how they feel.'
         )
       );

@@ -1,11 +1,17 @@
 const stringSimilarity = require('string-similarity');
+const { normalizeLanguage } = require('../../lib/language');
+
+function getLocale(language) {
+  return normalizeLanguage(language) === 'en' ? 'en-US' : 'tr-TR';
+}
 
 /**
  * Yönelim Testi Skorlama
  * 7 yönelim sorusu (zaman, mekan) sorulur.
  * Her doğru cevap için puan verilir.
  */
-function scoreOrientation(answers) {
+function scoreOrientation(answers, language = 'tr') {
+  const locale = getLocale(language);
   const maxScore = 25;
   const perQuestionMax = maxScore / 7; // Her soru ~3.57 puan
 
@@ -13,8 +19,8 @@ function scoreOrientation(answers) {
   const detailedResults = [];
 
   for (const answer of answers) {
-    const correct = answer.correctAnswer.toLocaleLowerCase('tr').trim();
-    const user = (answer.userAnswer || '').toLocaleLowerCase('tr').trim();
+    const correct = answer.correctAnswer.toLocaleLowerCase(locale).trim();
+    const user = (answer.userAnswer || '').toLocaleLowerCase(locale).trim();
 
     if (!user) {
       detailedResults.push({

@@ -1,11 +1,17 @@
 const stringSimilarity = require('string-similarity');
+const { normalizeLanguage } = require('../../lib/language');
+
+function getLocale(language) {
+  return normalizeLanguage(language) === 'en' ? 'en-US' : 'tr-TR';
+}
 
 /**
  * Görsel Tanıma Testi Skorlama
  * 3 görsel gösterilir, kullanıcıdan ne olduğunu söylemesi istenir.
  * Her doğru cevap için puan verilir; yakın cevaplar kısmi puan alır.
  */
-function scoreVisualRecognition(answers) {
+function scoreVisualRecognition(answers, language = 'tr') {
+  const locale = getLocale(language);
   const maxScore = 25;
   const perImageMax = maxScore / 3; // Her görsel ~8.33 puan
 
@@ -13,8 +19,8 @@ function scoreVisualRecognition(answers) {
   const detailedResults = [];
 
   for (const answer of answers) {
-    const correct = String(answer.correctAnswer || '').toLowerCase().trim();
-    const user = String(answer.userAnswer || '').toLowerCase().trim();
+    const correct = String(answer.correctAnswer || '').toLocaleLowerCase(locale).trim();
+    const user = String(answer.userAnswer || '').toLocaleLowerCase(locale).trim();
 
     if (!user) {
       detailedResults.push({

@@ -1,10 +1,22 @@
 const stringSimilarity = require('string-similarity');
+const { normalizeLanguage } = require('../../lib/language');
+
+function getLocale(language) {
+  return normalizeLanguage(language) === 'en' ? 'en-US' : 'tr-TR';
+}
+
+const STOP_WORDS = {
+  tr: ['ve', 'bir', 'bu', 'da', 'de', 'ile', 'için', 'çok', 'daha', 'olan', 'den', 'dan', 'sonra', 'gibi'],
+  en: ['the', 'and', 'was', 'she', 'her', 'his', 'they', 'them', 'with', 'from', 'that', 'this', 'then', 'also', 'were', 'had', 'for', 'but', 'not'],
+};
 
 /**
  * Hikaye Hatırlama Testi Skorlama
  * Orijinal hikaye ile kullanıcının tekrarladığı metin arasındaki benzerliği ölçer.
  */
-function scoreStoryRecall(originalStory, recalledText) {
+function scoreStoryRecall(originalStory, recalledText, language = 'tr') {
+  const locale = getLocale(language);
+  const lang = normalizeLanguage(language);
   const maxScore = 25;
 
   if (!recalledText || recalledText.trim().length === 0) {
@@ -15,14 +27,14 @@ function scoreStoryRecall(originalStory, recalledText) {
     };
   }
 
-  const normalizedOriginal = originalStory.toLocaleLowerCase('tr').trim();
-  const normalizedRecalled = recalledText.toLocaleLowerCase('tr').trim();
+  const normalizedOriginal = originalStory.toLocaleLowerCase(locale).trim();
+  const normalizedRecalled = recalledText.toLocaleLowerCase(locale).trim();
 
   // Genel metin benzerliği (Dice coefficient)
   const similarity = stringSimilarity.compareTwoStrings(normalizedOriginal, normalizedRecalled);
 
   // Anahtar kelime analizi - hikayedeki önemli kelimeleri çıkar (4+ karakter)
-  const stopWords = ['ve', 'bir', 'bu', 'da', 'de', 'ile', 'için', 'çok', 'daha', 'olan'];
+  const stopWords = STOP_WORDS[lang] || STOP_WORDS.tr;
   const originalWords = normalizedOriginal
     .split(/\s+/)
     .filter((w) => w.length >= 4 && !stopWords.includes(w));

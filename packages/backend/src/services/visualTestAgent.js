@@ -87,6 +87,12 @@ const AGENT_ADVANCE_PATTERNS = [
   /\bgorsel tanima testini tamamladiniz\b/,
   /\bsubmit_visual_recognition\b/,
   /\btest 4\b/,
+  /\bmoving on to the next\b/,
+  /\blet me show you the next\b/,
+  /\bnow for the next image\b/,
+  /\bimage number (?:two|three|2|3)\b/,
+  /\bvisual test is (?:complete|done|finished)\b/,
+  /\ball images (?:are |have been )?answered\b/,
 ];
 
 function normalizeForIntent(rawText, language) {

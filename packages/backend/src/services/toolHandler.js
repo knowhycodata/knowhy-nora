@@ -381,7 +381,7 @@ async function handleVerbalFluency({ sessionId, words, targetLetter, durationSec
 
 async function handleStoryRecall({ sessionId, originalStory, recalledStory }) {
   const language = getSessionLanguage(sessionId);
-  const result = scoreStoryRecall(originalStory, recalledStory);
+  const result = scoreStoryRecall(originalStory, recalledStory, language);
 
   await prisma.testResult.upsert({
     where: { sessionId_testType: { sessionId, testType: 'STORY_RECALL' } },
@@ -580,7 +580,7 @@ async function handleVisualRecognition({ sessionId, answers }) {
   }
 
   const trustedAnswers = authoritativeAnswers || answers;
-  const result = scoreVisualRecognition(trustedAnswers);
+  const result = scoreVisualRecognition(trustedAnswers, language);
 
   await prisma.testResult.upsert({
     where: { sessionId_testType: { sessionId, testType: 'VISUAL_RECOGNITION' } },
@@ -614,7 +614,7 @@ async function handleOrientation({ sessionId, answers }) {
     return getCameraBlockedResult(language, cameraState);
   }
 
-  const result = scoreOrientation(answers);
+  const result = scoreOrientation(answers, language);
 
   await prisma.testResult.upsert({
     where: { sessionId_testType: { sessionId, testType: 'ORIENTATION' } },
