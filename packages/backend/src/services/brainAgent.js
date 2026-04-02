@@ -1155,7 +1155,13 @@ class BrainAgent {
   _containsAny(text, keywords) {
     if (!text) return false;
     const normalizedText = normalizeForMatch(text, this.language);
-    return keywords.some((keyword) => normalizedText.includes(normalizeForMatch(keyword, this.language)));
+    // Gemini transkript parçalaması boşlukları yanlış yerlere koyabiliyor
+    // ("kada r" vs "kadar") — boşluk-agnostik karşılaştırma da yap
+    const spacelessText = normalizedText.replace(/\s/g, '');
+    return keywords.some((keyword) => {
+      const nk = normalizeForMatch(keyword, this.language);
+      return normalizedText.includes(nk) || spacelessText.includes(nk.replace(/\s/g, ''));
+    });
   }
 }
 
