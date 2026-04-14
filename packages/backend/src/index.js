@@ -28,6 +28,7 @@ const log = createLogger('Server');
 const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 3001;
+app.set('trust proxy', 1);
 const SESSION_MAX_DURATION_MS = (() => {
   const parsed = Number.parseInt(process.env.SESSION_MAX_DURATION_MS, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 8 * 60 * 1000;

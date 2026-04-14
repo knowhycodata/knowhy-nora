@@ -8,7 +8,7 @@ substitutions:
   _REPO_NAME: nora-repo
   _BACKEND_SERVICE: nora-backend
   _FRONTEND_SERVICE: nora-frontend
-  _SQL_INSTANCE: nora-pg
+  _SQL_INSTANCE: nora-pg-small
   _CUSTOM_FRONTEND_ORIGIN: https://nora.knowhy.app
 
 steps:

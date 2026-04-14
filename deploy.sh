@@ -16,6 +16,7 @@ NC='\033[0m'
 PROJECT_ID="geminichallenge-490221"
 REGION="us-central1"
 REPO_NAME="nora-repo"
+CLOUD_SQL_INSTANCE="${PROJECT_ID}:${REGION}:nora-pg-small"
 BACKEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/nora-backend"
 FRONTEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/nora-frontend"
 CUSTOM_FRONTEND_ORIGIN="https://nora.knowhy.app"
@@ -78,7 +79,7 @@ gcloud run deploy nora-backend \
     --image "${BACKEND_IMAGE}:latest" \
     --region "${REGION}" \
     --allow-unauthenticated \
-    --add-cloudsql-instances "${PROJECT_ID}:${REGION}:nora-pg" \
+    --add-cloudsql-instances "${CLOUD_SQL_INSTANCE}" \
     --session-affinity \
     --timeout=3600 \
     --memory=512Mi \
